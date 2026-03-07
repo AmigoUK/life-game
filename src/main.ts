@@ -1,0 +1,18 @@
+import { SimulationEngine } from './core/SimulationEngine';
+import { GameLoop } from './core/GameLoop';
+import { Renderer } from './rendering/Renderer';
+import { Controls } from './ui/Controls';
+import { GRID_RADIUS } from './core/constants';
+
+const canvas = document.getElementById('canvas') as HTMLCanvasElement;
+const controlsContainer = document.getElementById('controls') as HTMLDivElement;
+
+const engine = new SimulationEngine(GRID_RADIUS);
+const renderer = new Renderer(canvas);
+const gameLoop = new GameLoop(engine, renderer);
+
+new Controls(controlsContainer, gameLoop);
+
+// Initial render
+renderer.configure(engine.grid);
+renderer.render(engine.grid, engine.entities, engine.foods, 0);
