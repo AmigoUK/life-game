@@ -4,6 +4,7 @@ import { createEntity, resetEntityIdCounter } from './Entity';
 import { createFood, consumeFood, tickFood, resetFoodIdCounter } from './Food';
 import { crossover, mutate } from './DNA';
 import { SimulationConfig } from './SimulationConfig';
+import { EnvironmentEvents } from './EnvironmentEvents';
 
 export type DeathCause = 'starvation' | 'age' | 'combat';
 export type SimEvent = { type: 'death' | 'reproduce' | 'combat'; pos: HexCoord; cause?: DeathCause };
@@ -14,7 +15,9 @@ export class SimulationEngine {
   foods: FoodState[] = [];
   tickCount = 0;
   config: SimulationConfig;
+  envEvents = new EnvironmentEvents();
   private eventListeners: ((event: SimEvent) => void)[] = [];
+  private bannerCallback: ((text: string) => void) | null = null;
 
   onEvent(listener: (event: SimEvent) => void): void {
     this.eventListeners.push(listener);
@@ -22,6 +25,10 @@ export class SimulationEngine {
 
   private emit(event: SimEvent): void {
     for (const l of this.eventListeners) l(event);
+  }
+
+  onBanner(cb: (text: string) => void): void {
+    this.bannerCallback = cb;
   }
 
   constructor(config: SimulationConfig) {
@@ -36,6 +43,7 @@ export class SimulationEngine {
     this.entities = [];
     this.foods = [];
     this.tickCount = 0;
+    this.envEvents.reset();
 
     for (let i = 0; i < this.config.initialPopulation; i++) {
       const sex = i % 2 === 0 ? 'M' as const : 'F' as const;
@@ -78,11 +86,14 @@ export class SimulationEngine {
     }
 
     // Phase 3: Food consumption
+    const respawnTicks = this.envEvents.isDroughtActive()
+      ? cfg.foodRespawnTicks * 2
+      : cfg.foodRespawnTicks;
     for (const e of this.entities) {
       if (!e.alive) continue;
       for (const food of this.foods) {
         if (!food.consumed && HexGrid.equals(e.pos, food.pos)) {
-          e.energy += consumeFood(food, cfg.foodRespawnTicks);
+          e.energy += consumeFood(food, respawnTicks);
           e.energy = Math.min(e.energy, cfg.maxEnergy);
           break;
         }
@@ -119,6 +130,18 @@ export class SimulationEngine {
 
     // Phase 6: Cleanup dead
     this.entities = this.entities.filter(e => e.alive);
+
+    // Phase 7: Environmental events
+    if (cfg.environmentalEvents) {
+      this.envEvents.tick(
+        this.tickCount,
+        this.entities,
+        this.foods,
+        this.grid,
+        cfg.foodEnergy,
+        (text) => this.bannerCallback?.(text),
+      );
+    }
   }
 
   private moveEntity(e: EntityState): void {

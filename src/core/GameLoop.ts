@@ -30,6 +30,9 @@ export class GameLoop {
       else if (event.type === 'combat') effects.addCombat(event.pos);
       this.analytics.handleEvent(event);
     });
+    this.engine.onBanner((text) => {
+      this.renderer.getUIOverlay().showBanner(text);
+    });
   }
 
   getAnalytics(): Analytics {
@@ -71,6 +74,7 @@ export class GameLoop {
     this.analytics.update(this.engine.entities, this.engine.foods);
     this.renderer.getEffects().tick();
     this.renderer.advanceFoodTick();
+    this.renderer.getUIOverlay().tickBanner();
     this.render();
   }
 
@@ -106,6 +110,7 @@ export class GameLoop {
       this.analytics.update(this.engine.entities, this.engine.foods);
       this.renderer.getEffects().tick();
       this.renderer.advanceFoodTick();
+      this.renderer.getUIOverlay().tickBanner();
       this.lastTick = now;
     }
 

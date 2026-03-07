@@ -4,8 +4,10 @@ export class HexRenderer {
   private hexSize = 0;
   private centerX = 0;
   private centerY = 0;
+  private grid: HexGrid | null = null;
 
   configure(canvas: HTMLCanvasElement, grid: HexGrid): void {
+    this.grid = grid;
     const padding = 20;
     const maxW = (canvas.width - padding * 2) / (3 * grid.radius + 1.5);
     const maxH = (canvas.height - padding * 2) / (Math.sqrt(3) * (2 * grid.radius + 1));
@@ -16,6 +18,7 @@ export class HexRenderer {
 
   getHexSize(): number { return this.hexSize; }
   getCenter(): { x: number; y: number } { return { x: this.centerX, y: this.centerY }; }
+  getGrid(): HexGrid | null { return this.grid; }
 
   drawGrid(ctx: CanvasRenderingContext2D, grid: HexGrid): void {
     const size = this.hexSize;

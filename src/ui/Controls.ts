@@ -2,6 +2,8 @@ import { GameLoop } from '../core/GameLoop';
 import { Analytics, GeneAverages, TickSnapshot } from '../core/Analytics';
 import { MIN_TICK_MS, MAX_TICK_MS } from '../core/constants';
 import { SimulationConfig, SCENARIO_PRESETS, buildConfig } from '../core/SimulationConfig';
+import { Renderer } from '../rendering/Renderer';
+import { HeatmapMode } from '../rendering/HeatmapRenderer';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs?: Record<string, string>, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -50,6 +52,7 @@ const SLIDER_DEFS: SliderDef[] = [
 export class Controls {
   private container: HTMLElement;
   private gameLoop: GameLoop;
+  private renderer: Renderer;
   private statsEl!: HTMLDivElement;
   private genePoolEl!: HTMLDivElement;
   private sparklineCanvas!: HTMLCanvasElement;
@@ -61,9 +64,10 @@ export class Controls {
   private eventsToggle!: HTMLInputElement;
   private pendingConfig: SimulationConfig;
 
-  constructor(container: HTMLElement, gameLoop: GameLoop) {
+  constructor(container: HTMLElement, gameLoop: GameLoop, renderer: Renderer) {
     this.container = container;
     this.gameLoop = gameLoop;
+    this.renderer = renderer;
     this.pendingConfig = { ...gameLoop.getConfig() };
     this.build();
     this.setupKeyboard();
@@ -180,7 +184,29 @@ export class Controls {
     this.sparklineCanvas = el('canvas', { width: '180', height: '60', style: 'width:100%;height:60px;background:#1a1a1a;border-radius:3px;' });
     chartSection.body.appendChild(this.sparklineCanvas);
 
-    wrapper.append(btnRow, speedGroup, configSection.wrapper, popSection.wrapper, geneSection.wrapper, chartSection.wrapper);
+    // Heatmap section
+    const heatmapSection = createCollapsible('Heatmap', false);
+    const heatmapRow = el('div', { style: 'display:flex;align-items:center;gap:8px;' });
+    const heatmapCheck = el('input', { type: 'checkbox' }) as HTMLInputElement;
+    const heatmapLabel = el('label', { style: 'display:flex;align-items:center;gap:4px;font-size:11px;color:#aaa;cursor:pointer;' });
+    heatmapLabel.append(heatmapCheck, document.createTextNode('Enable'));
+    const heatmapModeSelect = el('select', { style: 'padding:2px;background:#333;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;' });
+    for (const mode of ['population', 'food', 'combat'] as HeatmapMode[]) {
+      heatmapModeSelect.appendChild(el('option', { value: mode }, mode.charAt(0).toUpperCase() + mode.slice(1)));
+    }
+    heatmapRow.append(heatmapLabel, heatmapModeSelect);
+    heatmapSection.body.appendChild(heatmapRow);
+
+    heatmapCheck.addEventListener('change', () => {
+      this.renderer.setHeatmap(heatmapCheck.checked, heatmapModeSelect.value as HeatmapMode);
+    });
+    heatmapModeSelect.addEventListener('change', () => {
+      if (heatmapCheck.checked) {
+        this.renderer.setHeatmap(true, heatmapModeSelect.value as HeatmapMode);
+      }
+    });
+
+    wrapper.append(btnRow, speedGroup, configSection.wrapper, popSection.wrapper, geneSection.wrapper, chartSection.wrapper, heatmapSection.wrapper);
     this.container.appendChild(wrapper);
 
     // Event listeners
@@ -337,6 +363,9 @@ export class Controls {
       } else if (e.code === 'ArrowRight') {
         e.preventDefault();
         this.gameLoop.stepOnce();
+      } else if (e.code === 'KeyH') {
+        const enabled = !this.renderer.isHeatmapEnabled();
+        this.renderer.setHeatmap(enabled);
       }
     });
   }

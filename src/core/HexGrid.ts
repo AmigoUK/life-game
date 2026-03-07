@@ -117,4 +117,28 @@ export class HexGrid {
     const y = size * (Math.sqrt(3) / 2 * coord.q + Math.sqrt(3) * coord.r);
     return { x: cx + x, y: cy + y };
   }
+
+  // Reverse of hexToPixel: pixel to nearest cube coordinate
+  pixelToHex(px: number, py: number, size: number, cx: number, cy: number): HexCoord {
+    const x = px - cx;
+    const y = py - cy;
+    const q = (2 / 3 * x) / size;
+    const r = (-1 / 3 * x + Math.sqrt(3) / 3 * y) / size;
+    const s = -q - r;
+    // Cube round
+    let rq = Math.round(q);
+    let rr = Math.round(r);
+    let rs = Math.round(s);
+    const dq = Math.abs(rq - q);
+    const dr = Math.abs(rr - r);
+    const ds = Math.abs(rs - s);
+    if (dq > dr && dq > ds) {
+      rq = -rr - rs;
+    } else if (dr > ds) {
+      rr = -rq - rs;
+    } else {
+      rs = -rq - rr;
+    }
+    return { q: rq, r: rr, s: rs };
+  }
 }

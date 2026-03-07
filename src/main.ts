@@ -11,7 +11,7 @@ const engine = new SimulationEngine(DEFAULT_CONFIG);
 const renderer = new Renderer(canvas);
 const gameLoop = new GameLoop(engine, renderer);
 
-new Controls(controlsContainer, gameLoop);
+new Controls(controlsContainer, gameLoop, renderer);
 
 // Initial render
 renderer.configure(engine.grid);
