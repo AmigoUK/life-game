@@ -1,17 +1,4 @@
-export const GRID_RADIUS = 12;
-export const INITIAL_POPULATION = 30;
-export const INITIAL_FOOD_COUNT = 40;
-
 export const DNA_LENGTH = 16;
-export const MUTATION_CHANCE = 0.05;
-export const MUTATION_AMOUNT = 0.15;
-
-export const ENERGY_PER_TICK = 0.5;
-export const FOOD_ENERGY = 30;
-export const FOOD_RESPAWN_TICKS = 80;
-export const REPRODUCTION_ENERGY_COST = 40;
-export const INITIAL_ENERGY = 60;
-export const CHILD_ENERGY = 50;
 
 export const TICK_INTERVAL_MS = 200;
 export const MIN_TICK_MS = 50;

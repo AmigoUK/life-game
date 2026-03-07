@@ -42,6 +42,7 @@ export interface FoodState {
   pos: HexCoord;
   energy: number;
   respawnTimer: number;
+  maxRespawnTimer: number;
   consumed: boolean;
 }
 

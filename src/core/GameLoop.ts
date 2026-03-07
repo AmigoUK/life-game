@@ -1,6 +1,7 @@
 import { SimulationEngine } from './SimulationEngine';
 import { Analytics } from './Analytics';
 import { Renderer } from '../rendering/Renderer';
+import { SimulationConfig } from './SimulationConfig';
 import { TICK_INTERVAL_MS } from './constants';
 
 export class GameLoop {
@@ -11,9 +12,11 @@ export class GameLoop {
   private lastTick = 0;
   private rafId = 0;
   private analytics = new Analytics();
+  private currentConfig: SimulationConfig;
 
   constructor(engine: SimulationEngine, renderer: Renderer) {
     this.engine = engine;
+    this.currentConfig = engine.config;
     this.renderer = renderer;
     this.renderer.configure(this.engine.grid);
     this.wireEffects();
@@ -62,10 +65,20 @@ export class GameLoop {
     return this.tickInterval;
   }
 
-  reset(gridRadius?: number): void {
+  stepOnce(): void {
+    if (this.running) return;
+    this.engine.tick();
+    this.analytics.update(this.engine.entities, this.engine.foods);
+    this.renderer.getEffects().tick();
+    this.renderer.advanceFoodTick();
+    this.render();
+  }
+
+  reset(config?: SimulationConfig): void {
     this.stop();
-    if (gridRadius !== undefined) {
-      this.engine = new SimulationEngine(gridRadius);
+    if (config) {
+      this.currentConfig = config;
+      this.engine = new SimulationEngine(config);
       this.wireEffects();
     } else {
       this.engine.init();
@@ -75,6 +88,10 @@ export class GameLoop {
     this.renderer.configure(this.engine.grid);
     this.renderer.invalidateGridCache();
     this.render();
+  }
+
+  getConfig(): SimulationConfig {
+    return this.currentConfig;
   }
 
   getEngine(): SimulationEngine {

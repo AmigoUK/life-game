@@ -1,6 +1,7 @@
 import { GameLoop } from '../core/GameLoop';
 import { Analytics, GeneAverages, TickSnapshot } from '../core/Analytics';
 import { MIN_TICK_MS, MAX_TICK_MS } from '../core/constants';
+import { SimulationConfig, SCENARIO_PRESETS, buildConfig } from '../core/SimulationConfig';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs?: Record<string, string>, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -25,6 +26,27 @@ function createCollapsible(title: string, defaultOpen = true): { wrapper: HTMLDi
   return { wrapper, body };
 }
 
+interface SliderDef {
+  key: keyof SimulationConfig;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+}
+
+const SLIDER_DEFS: SliderDef[] = [
+  { key: 'initialPopulation', label: 'Population', min: 5, max: 200, step: 5 },
+  { key: 'initialFoodCount', label: 'Food Count', min: 5, max: 200, step: 5 },
+  { key: 'foodEnergy', label: 'Food Energy', min: 5, max: 100, step: 5 },
+  { key: 'foodRespawnTicks', label: 'Food Respawn', min: 10, max: 300, step: 10 },
+  { key: 'energyPerTick', label: 'Energy Drain', min: 0.1, max: 3.0, step: 0.1 },
+  { key: 'reproductionEnergyCost', label: 'Repro Cost', min: 10, max: 100, step: 5 },
+  { key: 'mutationChance', label: 'Mutation Rate', min: 0.01, max: 0.30, step: 0.01 },
+  { key: 'mutationAmount', label: 'Mut. Amount', min: 0.05, max: 0.50, step: 0.05 },
+  { key: 'maxEnergy', label: 'Max Energy', min: 50, max: 300, step: 10 },
+  { key: 'maxSpeed', label: 'Max Speed', min: 0.2, max: 1.0, step: 0.1 },
+];
+
 export class Controls {
   private container: HTMLElement;
   private gameLoop: GameLoop;
@@ -32,10 +54,17 @@ export class Controls {
   private genePoolEl!: HTMLDivElement;
   private sparklineCanvas!: HTMLCanvasElement;
   private btnToggle!: HTMLButtonElement;
+  private scenarioSelect!: HTMLSelectElement;
+  private sliderInputs: Map<string, HTMLInputElement> = new Map();
+  private sliderValues: Map<string, HTMLSpanElement> = new Map();
+  private hungerToggle!: HTMLInputElement;
+  private eventsToggle!: HTMLInputElement;
+  private pendingConfig: SimulationConfig;
 
   constructor(container: HTMLElement, gameLoop: GameLoop) {
     this.container = container;
     this.gameLoop = gameLoop;
+    this.pendingConfig = { ...gameLoop.getConfig() };
     this.build();
     this.setupKeyboard();
   }
@@ -48,8 +77,9 @@ export class Controls {
     // Buttons row
     const btnRow = el('div', { style: 'display:flex;gap:8px;' });
     this.btnToggle = el('button', { id: 'btn-toggle', style: 'flex:1;padding:6px 12px;cursor:pointer;background:#2d6a4f;color:#fff;border:none;border-radius:4px;' }, 'Start');
+    const btnStep = el('button', { id: 'btn-step', style: 'padding:6px 10px;cursor:pointer;background:#4a5568;color:#fff;border:none;border-radius:4px;font-size:14px;', title: 'Step one tick (Right Arrow)' }, '\u25B6|');
     const btnReset = el('button', { id: 'btn-reset', style: 'flex:1;padding:6px 12px;cursor:pointer;background:#a4161a;color:#fff;border:none;border-radius:4px;' }, 'Reset');
-    btnRow.append(this.btnToggle, btnReset);
+    btnRow.append(this.btnToggle, btnStep, btnReset);
 
     // Speed slider
     const speedGroup = el('div');
@@ -65,17 +95,77 @@ export class Controls {
     });
     speedGroup.append(speedLabel, speedSlider);
 
-    // Grid size selector
-    const sizeGroup = el('div');
-    const sizeLabel = el('label', { style: 'display:block;margin-bottom:4px;' }, 'Grid Radius:');
-    const gridSize = el('select', { id: 'grid-size', style: 'width:100%;padding:4px;background:#333;color:#fff;border:1px solid #555;border-radius:4px;' });
-    const sizes: [string, string, boolean][] = [['8', 'Small (8)', false], ['12', 'Medium (12)', true], ['18', 'Large (18)', false], ['24', 'Huge (24)', false]];
-    for (const [val, label, selected] of sizes) {
-      const opt = el('option', { value: val }, label);
-      if (selected) opt.selected = true;
-      gridSize.appendChild(opt);
+    // Scenario & Config section
+    const configSection = createCollapsible('Scenario & Config', false);
+
+    // Scenario dropdown
+    const scenarioRow = el('div', { style: 'margin-bottom:8px;' });
+    const scenarioLabel = el('label', { style: 'display:block;margin-bottom:4px;font-size:11px;color:#ccc;' }, 'Scenario:');
+    this.scenarioSelect = el('select', { style: 'width:100%;padding:4px;background:#333;color:#fff;border:1px solid #555;border-radius:4px;font-size:12px;' });
+    for (const name of Object.keys(SCENARIO_PRESETS)) {
+      this.scenarioSelect.appendChild(el('option', { value: name }, name));
     }
-    sizeGroup.append(sizeLabel, gridSize);
+    this.scenarioSelect.appendChild(el('option', { value: '__custom__' }, 'Custom'));
+    scenarioRow.append(scenarioLabel, this.scenarioSelect);
+    configSection.body.appendChild(scenarioRow);
+
+    // Parameter sliders
+    for (const def of SLIDER_DEFS) {
+      const row = el('div', { style: 'display:flex;align-items:center;gap:4px;margin-bottom:3px;' });
+      const label = el('span', { style: 'width:75px;font-size:10px;color:#aaa;flex-shrink:0;' }, def.label);
+      const input = el('input', {
+        type: 'range',
+        min: String(def.min),
+        max: String(def.max),
+        step: String(def.step),
+        value: String(this.pendingConfig[def.key]),
+        style: 'flex:1;height:14px;',
+      });
+      const valSpan = el('span', { style: 'width:36px;font-size:10px;text-align:right;color:#888;flex-shrink:0;' }, this.formatSliderValue(def, Number(this.pendingConfig[def.key])));
+      row.append(label, input, valSpan);
+      configSection.body.appendChild(row);
+
+      this.sliderInputs.set(def.key, input);
+      this.sliderValues.set(def.key, valSpan);
+
+      input.addEventListener('input', () => {
+        const v = parseFloat(input.value);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (this.pendingConfig as any)[def.key] = v;
+        valSpan.textContent = this.formatSliderValue(def, v);
+        this.scenarioSelect.value = '__custom__';
+      });
+    }
+
+    // Toggles
+    const togglesRow = el('div', { style: 'display:flex;gap:12px;margin-top:4px;margin-bottom:6px;' });
+    this.hungerToggle = el('input', { type: 'checkbox' }) as HTMLInputElement;
+    this.hungerToggle.checked = this.pendingConfig.hungerSlowdown;
+    const hungerLabel = el('label', { style: 'display:flex;align-items:center;gap:4px;font-size:10px;color:#aaa;cursor:pointer;' });
+    hungerLabel.append(this.hungerToggle, document.createTextNode('Hunger Slowdown'));
+
+    this.eventsToggle = el('input', { type: 'checkbox' }) as HTMLInputElement;
+    this.eventsToggle.checked = this.pendingConfig.environmentalEvents;
+    const eventsLabel = el('label', { style: 'display:flex;align-items:center;gap:4px;font-size:10px;color:#aaa;cursor:pointer;' });
+    eventsLabel.append(this.eventsToggle, document.createTextNode('Env. Events'));
+
+    togglesRow.append(hungerLabel, eventsLabel);
+    configSection.body.appendChild(togglesRow);
+
+    this.hungerToggle.addEventListener('change', () => {
+      this.pendingConfig.hungerSlowdown = this.hungerToggle.checked;
+      this.scenarioSelect.value = '__custom__';
+    });
+    this.eventsToggle.addEventListener('change', () => {
+      this.pendingConfig.environmentalEvents = this.eventsToggle.checked;
+      this.scenarioSelect.value = '__custom__';
+    });
+
+    // Apply & Reset button
+    const applyBtn = el('button', {
+      style: 'width:100%;padding:5px;cursor:pointer;background:#2d6a4f;color:#fff;border:none;border-radius:4px;font-size:11px;',
+    }, 'Apply & Reset');
+    configSection.body.appendChild(applyBtn);
 
     // Population section
     const popSection = createCollapsible('Population', true);
@@ -90,15 +180,15 @@ export class Controls {
     this.sparklineCanvas = el('canvas', { width: '180', height: '60', style: 'width:100%;height:60px;background:#1a1a1a;border-radius:3px;' });
     chartSection.body.appendChild(this.sparklineCanvas);
 
-    wrapper.append(btnRow, speedGroup, sizeGroup, popSection.wrapper, geneSection.wrapper, chartSection.wrapper);
+    wrapper.append(btnRow, speedGroup, configSection.wrapper, popSection.wrapper, geneSection.wrapper, chartSection.wrapper);
     this.container.appendChild(wrapper);
 
     // Event listeners
     this.btnToggle.addEventListener('click', () => this.toggleSim());
+    btnStep.addEventListener('click', () => this.gameLoop.stepOnce());
 
     btnReset.addEventListener('click', () => {
-      const radius = parseInt(gridSize.value);
-      this.gameLoop.reset(radius);
+      this.gameLoop.reset(buildConfig(this.pendingConfig));
       this.syncToggleButton();
     });
 
@@ -108,13 +198,42 @@ export class Controls {
       speedVal.textContent = `${val}ms`;
     });
 
-    gridSize.addEventListener('change', () => {
-      const radius = parseInt(gridSize.value);
-      this.gameLoop.reset(radius);
+    this.scenarioSelect.addEventListener('change', () => {
+      const name = this.scenarioSelect.value;
+      if (name === '__custom__') return;
+      const preset = SCENARIO_PRESETS[name];
+      this.pendingConfig = buildConfig(preset);
+      this.syncSlidersToConfig();
+      this.gameLoop.reset(this.pendingConfig);
+      this.syncToggleButton();
+    });
+
+    applyBtn.addEventListener('click', () => {
+      this.pendingConfig.hungerSlowdown = this.hungerToggle.checked;
+      this.pendingConfig.environmentalEvents = this.eventsToggle.checked;
+      this.gameLoop.reset(buildConfig(this.pendingConfig));
       this.syncToggleButton();
     });
 
     setInterval(() => this.updateStats(), 250);
+  }
+
+  private formatSliderValue(def: SliderDef, val: number): string {
+    return def.step < 1 ? val.toFixed(2) : String(val);
+  }
+
+  private syncSlidersToConfig(): void {
+    for (const def of SLIDER_DEFS) {
+      const input = this.sliderInputs.get(def.key);
+      const valSpan = this.sliderValues.get(def.key);
+      if (input && valSpan) {
+        const v = Number(this.pendingConfig[def.key]);
+        input.value = String(v);
+        valSpan.textContent = this.formatSliderValue(def, v);
+      }
+    }
+    this.hungerToggle.checked = this.pendingConfig.hungerSlowdown;
+    this.eventsToggle.checked = this.pendingConfig.environmentalEvents;
   }
 
   private toggleSim(): void {
@@ -134,7 +253,6 @@ export class Controls {
     const snap = analytics.currentSnapshot;
     const deathPcts = analytics.getDeathCausePercents();
 
-    // Population section
     this.statsEl.textContent = '';
     const popLines = [
       `Tick: ${engine.tickCount}`,
@@ -150,10 +268,7 @@ export class Controls {
       this.statsEl.appendChild(document.createTextNode(text));
     });
 
-    // Gene Pool section
     this.updateGenePool(analytics);
-
-    // Sparkline chart
     this.drawSparkline(analytics.getHistory());
   }
 
@@ -219,6 +334,9 @@ export class Controls {
       if (e.code === 'Space') {
         e.preventDefault();
         this.toggleSim();
+      } else if (e.code === 'ArrowRight') {
+        e.preventDefault();
+        this.gameLoop.stepOnce();
       }
     });
   }

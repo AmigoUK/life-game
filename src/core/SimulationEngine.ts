@@ -3,10 +3,7 @@ import { HexGrid } from './HexGrid';
 import { createEntity, resetEntityIdCounter } from './Entity';
 import { createFood, consumeFood, tickFood, resetFoodIdCounter } from './Food';
 import { crossover, mutate } from './DNA';
-import {
-  INITIAL_POPULATION, INITIAL_FOOD_COUNT, ENERGY_PER_TICK,
-  REPRODUCTION_ENERGY_COST, CHILD_ENERGY,
-} from './constants';
+import { SimulationConfig } from './SimulationConfig';
 
 export type DeathCause = 'starvation' | 'age' | 'combat';
 export type SimEvent = { type: 'death' | 'reproduce' | 'combat'; pos: HexCoord; cause?: DeathCause };
@@ -16,6 +13,7 @@ export class SimulationEngine {
   entities: EntityState[] = [];
   foods: FoodState[] = [];
   tickCount = 0;
+  config: SimulationConfig;
   private eventListeners: ((event: SimEvent) => void)[] = [];
 
   onEvent(listener: (event: SimEvent) => void): void {
@@ -26,8 +24,9 @@ export class SimulationEngine {
     for (const l of this.eventListeners) l(event);
   }
 
-  constructor(gridRadius: number) {
-    this.grid = new HexGrid(gridRadius);
+  constructor(config: SimulationConfig) {
+    this.config = config;
+    this.grid = new HexGrid(config.gridRadius);
     this.init();
   }
 
@@ -38,26 +37,27 @@ export class SimulationEngine {
     this.foods = [];
     this.tickCount = 0;
 
-    // Spawn initial entities
-    for (let i = 0; i < INITIAL_POPULATION; i++) {
+    for (let i = 0; i < this.config.initialPopulation; i++) {
       const sex = i % 2 === 0 ? 'M' as const : 'F' as const;
-      this.entities.push(createEntity(this.grid.randomCell(), sex));
+      this.entities.push(
+        createEntity(this.grid.randomCell(), sex, undefined, 0, undefined, this.config.initialEnergy, this.config.aggressionBias)
+      );
     }
 
-    // Spawn initial food
-    for (let i = 0; i < INITIAL_FOOD_COUNT; i++) {
-      this.foods.push(createFood(this.grid.randomCell()));
+    for (let i = 0; i < this.config.initialFoodCount; i++) {
+      this.foods.push(createFood(this.grid.randomCell(), this.config.foodEnergy));
     }
   }
 
   tick(): void {
     this.tickCount++;
+    const cfg = this.config;
 
     // Phase 1: Aging and energy drain
     for (const e of this.entities) {
       if (!e.alive) continue;
       e.age++;
-      e.energy -= ENERGY_PER_TICK * e.decoded.energyEfficiency;
+      e.energy -= cfg.energyPerTick * e.decoded.energyEfficiency;
       if (e.age > e.decoded.maxAge || e.energy <= 0) {
         const cause: DeathCause = e.energy <= 0 ? 'starvation' : 'age';
         e.alive = false;
@@ -68,7 +68,12 @@ export class SimulationEngine {
     // Phase 2: Decision and movement
     for (const e of this.entities) {
       if (!e.alive) continue;
-      if (Math.random() > e.decoded.speed) continue;
+      const speed = Math.min(e.decoded.speed, cfg.maxSpeed);
+      let moveProb = speed;
+      if (cfg.hungerSlowdown && e.energy < 30) {
+        moveProb *= 0.5;
+      }
+      if (Math.random() > moveProb) continue;
       this.moveEntity(e);
     }
 
@@ -77,7 +82,8 @@ export class SimulationEngine {
       if (!e.alive) continue;
       for (const food of this.foods) {
         if (!food.consumed && HexGrid.equals(e.pos, food.pos)) {
-          e.energy += consumeFood(food);
+          e.energy += consumeFood(food, cfg.foodRespawnTicks);
+          e.energy = Math.min(e.energy, cfg.maxEnergy);
           break;
         }
       }
@@ -119,7 +125,6 @@ export class SimulationEngine {
     const vision = e.decoded.visionRange;
     const visibleCells = this.grid.hexInRange(e.pos, vision);
 
-    // Check for threats (same sex, aggressive)
     const threats = this.entities.filter(other =>
       other.alive && other.id !== e.id && other.sex === e.sex &&
       other.decoded.aggression > 0.5 &&
@@ -127,7 +132,6 @@ export class SimulationEngine {
     );
 
     if (threats.length > 0 && e.decoded.aggression < 0.5) {
-      // Flee from nearest threat
       const nearest = threats.reduce((best, t) =>
         HexGrid.distance(e.pos, t.pos) < HexGrid.distance(e.pos, best.pos) ? t : best
       );
@@ -138,7 +142,6 @@ export class SimulationEngine {
       return;
     }
 
-    // Decide: seek food or partner based on foodAffinity
     const seekFood = Math.random() < e.decoded.foodAffinity || e.energy < 30;
 
     if (seekFood) {
@@ -166,15 +169,15 @@ export class SimulationEngine {
       }
     }
 
-    // Random movement with direction bias
     if (Math.random() > e.decoded.directionBias) {
       e.pos = this.grid.randomNeighborOrStay(e.pos);
     }
   }
 
   private tryReproduce(a: EntityState, b: EntityState): void {
-    const costA = REPRODUCTION_ENERGY_COST * (1 - a.decoded.fertilityBonus);
-    const costB = REPRODUCTION_ENERGY_COST * (1 - b.decoded.fertilityBonus);
+    const cfg = this.config;
+    const costA = cfg.reproductionEnergyCost * (1 - a.decoded.fertilityBonus);
+    const costB = cfg.reproductionEnergyCost * (1 - b.decoded.fertilityBonus);
 
     if (a.energy < costA || b.energy < costB) return;
 
@@ -182,18 +185,18 @@ export class SimulationEngine {
     b.energy -= costB;
 
     let childDna = crossover(a.dna, b.dna);
-    childDna = mutate(childDna, a.decoded.mutationResist, b.decoded.mutationResist);
+    childDna = mutate(childDna, a.decoded.mutationResist, b.decoded.mutationResist, cfg.mutationChance, cfg.mutationAmount);
 
     const childSex = Math.random() < 0.5 ? 'M' as const : 'F' as const;
     const childGen = Math.max(a.generation, b.generation) + 1;
 
-    // Child appears on same hex
     const child = createEntity(
       { ...a.pos },
       childSex,
       childDna,
       childGen,
-      CHILD_ENERGY
+      cfg.childEnergy,
+      cfg.initialEnergy,
     );
 
     this.entities.push(child);
@@ -207,7 +210,6 @@ export class SimulationEngine {
     if (!aFights && !bFights) return;
 
     if (aFights && !bFights) {
-      // b flees
       b.pos = this.grid.stepAwayFrom(b.pos, a.pos);
       return;
     }
@@ -216,7 +218,6 @@ export class SimulationEngine {
       return;
     }
 
-    // Both fight
     this.emit({ type: 'combat', pos: { ...a.pos } });
     this.resolveCombat(a, b);
   }

@@ -1,21 +1,22 @@
 import { FoodState, HexCoord } from './types';
-import { FOOD_ENERGY, FOOD_RESPAWN_TICKS } from './constants';
 
 let nextFoodId = 1;
 
-export function createFood(pos: HexCoord): FoodState {
+export function createFood(pos: HexCoord, energy: number): FoodState {
   return {
     id: nextFoodId++,
     pos,
-    energy: FOOD_ENERGY,
+    energy,
     respawnTimer: 0,
+    maxRespawnTimer: 0,
     consumed: false,
   };
 }
 
-export function consumeFood(food: FoodState): number {
+export function consumeFood(food: FoodState, respawnTicks: number): number {
   food.consumed = true;
-  food.respawnTimer = FOOD_RESPAWN_TICKS;
+  food.respawnTimer = respawnTicks;
+  food.maxRespawnTimer = respawnTicks;
   return food.energy;
 }
 

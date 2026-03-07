@@ -1,8 +1,14 @@
 import { DecodedDNA } from './types';
-import { DNA_LENGTH, DNA_RANGES, MUTATION_CHANCE, MUTATION_AMOUNT } from './constants';
+import { DNA_LENGTH, DNA_RANGES } from './constants';
 
-export function generateRandomDNA(): number[] {
-  return Array.from({ length: DNA_LENGTH }, () => Math.random());
+export function generateRandomDNA(aggressionBias?: [number, number]): number[] {
+  return Array.from({ length: DNA_LENGTH }, (_, i) => {
+    if (i === 7 && aggressionBias) {
+      const [min, max] = aggressionBias;
+      return min + Math.random() * (max - min);
+    }
+    return Math.random();
+  });
 }
 
 export function decodeDNA(dna: number[]): DecodedDNA {
@@ -39,13 +45,19 @@ export function crossover(parentA: number[], parentB: number[]): number[] {
   return child;
 }
 
-export function mutate(dna: number[], parentResistA: number, parentResistB: number): number[] {
+export function mutate(
+  dna: number[],
+  parentResistA: number,
+  parentResistB: number,
+  mutationChance: number,
+  mutationAmount: number,
+): number[] {
   const avgResist = (parentResistA + parentResistB) / 2;
-  const effectiveChance = MUTATION_CHANCE * (1 - avgResist);
+  const effectiveChance = mutationChance * (1 - avgResist);
 
   return dna.map(gene => {
     if (Math.random() < effectiveChance) {
-      const delta = (Math.random() * 2 - 1) * MUTATION_AMOUNT;
+      const delta = (Math.random() * 2 - 1) * mutationAmount;
       return Math.max(0, Math.min(1, gene + delta));
     }
     return gene;
