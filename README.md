@@ -4,7 +4,7 @@ An evolutionary life simulation on a hexagonal grid, built with TypeScript and H
 
 ## Inspiration
 
-This project was inspired by Prof. Andrzej Dragan's book *Quo Vadis*, where he described a programming experiment simulating evolution through simple rules and emergent behavior. The idea that complex evolutionary dynamics — natural selection, genetic drift, cooperation, and competition — can arise from basic programmatic rules served as the foundation for this simulation. What started as a curiosity about artificial life became a fully interactive evolution sandbox where you can observe how populations adapt to environmental pressures, form tribal alliances, and develop specialized survival strategies over hundreds of generations.
+This project was inspired by Prof. Andrzej Dragan's book *Quo vAIdis*, where he described a programming experiment simulating evolution through simple rules and emergent behavior. The idea that complex evolutionary dynamics — natural selection, genetic drift, cooperation, and competition — can arise from basic programmatic rules served as the foundation for this simulation. What started as a curiosity about artificial life became a fully interactive evolution sandbox where you can observe how populations adapt to environmental pressures, form tribal alliances, and develop specialized survival strategies over hundreds of generations.
 
 ## How It Works
 
