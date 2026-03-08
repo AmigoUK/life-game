@@ -18,6 +18,7 @@ export interface EndScreenData {
   winterSurvivalRate: number;
   initialGeneAverages: GeneAverages | null;
   finalGeneAverages: GeneAverages;
+  finalCarriedGeneAverages: GeneAverages;
   geneticDiversity: number;
   populationHistory: TickSnapshot[];
   seasonsEnabled: boolean;
@@ -396,7 +397,8 @@ export class EndScreen {
     y += 22;
 
     const initial = d.initialGeneAverages!;
-    const final = d.finalGeneAverages;
+    const final_ = d.finalGeneAverages;
+    const carried = d.finalCarriedGeneAverages;
     const genes: { key: keyof GeneAverages; label: string; max: number; color: string }[] = [
       { key: 'maxAge', label: 'Lifespan', max: 160, color: '#8bc34a' },
       { key: 'speed', label: 'Speed', max: 1, color: '#4fc3f7' },
@@ -415,41 +417,51 @@ export class EndScreen {
       { key: 'storageCapacity', label: 'Storage', max: 100, color: '#ffab40' },
     ];
 
-    const barW = (w - 120) / 2;
+    const barW = (w - 140) / 2;
 
     for (const g of genes) {
       ctx.fillStyle = '#999';
       ctx.font = '11px monospace';
-      ctx.fillText(g.label, x, y + 11);
+      ctx.fillText(g.label, x, y + 14);
 
       const initialRatio = Math.min(1, initial[g.key] / g.max);
-      const finalRatio = Math.min(1, final[g.key] / g.max);
+      const finalRatio = Math.min(1, final_[g.key] / g.max);
+      const carriedRatio = Math.min(1, carried[g.key] / g.max);
+
+      const barX = x + 70;
 
       // Initial bar (dimmer)
-      const barX = x + 70;
       ctx.globalAlpha = 0.4;
       ctx.fillStyle = g.color;
-      ctx.fillRect(barX, y, barW * initialRatio, 7);
+      ctx.fillRect(barX, y, barW * initialRatio, 6);
       ctx.globalAlpha = 1;
 
-      // Final bar
+      // Final expressed bar
       ctx.fillStyle = g.color;
-      ctx.fillRect(barX, y + 9, barW * finalRatio, 7);
+      ctx.fillRect(barX, y + 8, barW * finalRatio, 6);
+
+      // Final carried bar (dotted/lighter)
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = g.color;
+      ctx.fillRect(barX, y + 16, barW * carriedRatio, 6);
+      ctx.globalAlpha = 1;
 
       // Values
       ctx.fillStyle = '#666';
       ctx.font = '9px monospace';
       ctx.fillText(initial[g.key].toFixed(2), barX + barW + 6, y + 7);
       ctx.fillStyle = '#aaa';
-      ctx.fillText(final[g.key].toFixed(2), barX + barW + 6, y + 16);
+      ctx.fillText(final_[g.key].toFixed(2), barX + barW + 6, y + 15);
+      ctx.fillStyle = '#777';
+      ctx.fillText(carried[g.key].toFixed(2), barX + barW + 6, y + 23);
 
-      y += 22;
+      y += 28;
     }
 
     // Legend
     ctx.fillStyle = '#555';
     ctx.font = '10px monospace';
-    ctx.fillText('(top: initial, bottom: final)', x + 70, y + 10);
+    ctx.fillText('(top: initial, mid: final expressed, bottom: final carried)', x + 70, y + 10);
     y += 16;
 
     ctx.fillStyle = '#666';

@@ -2,7 +2,7 @@ import { EntityState, FoodState, HexCoord } from './types';
 import { HexGrid } from './HexGrid';
 import { createEntity, resetEntityIdCounter, resetNamePools, recycleName } from './Entity';
 import { createFood, consumeFood, tickFood, resetFoodIdCounter } from './Food';
-import { crossover, mutate } from './DNA';
+import { crossover, mutate, crossoverActivation, mutateActivation } from './DNA';
 import { SimulationConfig } from './SimulationConfig';
 import { EnvironmentEvents } from './EnvironmentEvents';
 import { TribeRegistry } from './Tribe';
@@ -107,6 +107,12 @@ export class SimulationEngine {
         const storageNeeded = Math.min(deficit / conversionRate, e.foodStorage);
         e.foodStorage -= storageNeeded;
         e.energy += storageNeeded * conversionRate;
+      }
+      // Metabolic reserve: stored food passively recovers energy each tick
+      if (e.foodStorage > 0 && e.energy > 0) {
+        const recovery = Math.min(1, e.foodStorage * 0.02) * e.decoded.energyEfficiency;
+        e.foodStorage -= recovery;
+        e.energy += recovery;
       }
       if (e.age > e.decoded.maxAge || e.energy <= 0) {
         const cause: DeathCause = e.energy <= 0 ? 'starvation' : 'age';
@@ -304,6 +310,10 @@ export class SimulationEngine {
       const fleeChance = e.decoded.speed + e.decoded.fleeSpeed;
       if (Math.random() < fleeChance) {
         e.pos = this.grid.stepAwayFrom(e.pos, nearest.pos);
+        // Double-step flee: high fleeSpeed entities escape faster
+        if (e.decoded.fleeSpeed >= 0.3) {
+          e.pos = this.grid.stepAwayFrom(e.pos, nearest.pos);
+        }
       }
       return;
     }
@@ -316,10 +326,32 @@ export class SimulationEngine {
         !f.consumed && visibleCells.some(c => HexGrid.equals(c, f.pos))
       );
       if (nearbyFood.length > 0) {
-        const closest = nearbyFood.reduce((best, f) =>
-          HexGrid.distance(e.pos, f.pos) < HexGrid.distance(e.pos, best.pos) ? f : best
-        );
-        e.pos = this.grid.stepToward(e.pos, closest.pos);
+        let target: HexCoord;
+        // High vision entities use food-density scan for smarter foraging
+        if (e.decoded.visionRange >= 3 && nearbyFood.length > 1) {
+          const neighbors = this.grid.neighbors(e.pos);
+          let bestDir = nearbyFood[0].pos;
+          let bestScore = -1;
+          for (const n of neighbors) {
+            let score = 0;
+            for (const f of nearbyFood) {
+              if (HexGrid.distance(n, f.pos) < HexGrid.distance(e.pos, f.pos)) score++;
+            }
+            if (score > bestScore) { bestScore = score; bestDir = n; }
+          }
+          target = bestDir;
+        } else {
+          const closest = nearbyFood.reduce((best, f) =>
+            HexGrid.distance(e.pos, f.pos) < HexGrid.distance(e.pos, best.pos) ? f : best
+          );
+          target = closest.pos;
+        }
+        // Direction accuracy: low directionBias may stumble
+        if (Math.random() > e.decoded.directionBias * 0.5 + 0.5) {
+          e.pos = this.grid.randomNeighborOrStay(e.pos);
+        } else {
+          e.pos = this.grid.stepToward(e.pos, target);
+        }
         return;
       }
     } else {
@@ -331,7 +363,12 @@ export class SimulationEngine {
         const closest = partners.reduce((best, p) =>
           HexGrid.distance(e.pos, p.pos) < HexGrid.distance(e.pos, best.pos) ? p : best
         );
-        e.pos = this.grid.stepToward(e.pos, closest.pos);
+        // Direction accuracy for mate-seeking too
+        if (Math.random() > e.decoded.directionBias * 0.5 + 0.5) {
+          e.pos = this.grid.randomNeighborOrStay(e.pos);
+        } else {
+          e.pos = this.grid.stepToward(e.pos, closest.pos);
+        }
         return;
       }
     }
@@ -392,8 +429,12 @@ export class SimulationEngine {
     a.energy -= costA;
     b.energy -= costB;
 
-    let childDna = crossover(a.dna, b.dna);
-    childDna = mutate(childDna, a.decoded.mutationResist, b.decoded.mutationResist, cfg.mutationChance, cfg.mutationAmount);
+    const { child: childDnaRaw, crossoverPoint } = crossover(a.dna, b.dna);
+    const childDna = mutate(childDnaRaw, a.decoded.mutationResist, b.decoded.mutationResist, cfg.mutationChance, cfg.mutationAmount);
+
+    // Inherit activation pattern using same crossover point, then mutate
+    let childActivation = crossoverActivation(a.geneActive, b.geneActive, crossoverPoint);
+    childActivation = mutateActivation(childActivation);
 
     const childSex = Math.random() < 0.5 ? 'M' as const : 'F' as const;
     const childGen = Math.max(a.generation, b.generation) + 1;
@@ -405,6 +446,8 @@ export class SimulationEngine {
       childGen,
       cfg.childEnergy,
       cfg.initialEnergy,
+      undefined,
+      childActivation,
     );
 
     this.entities.push(child);

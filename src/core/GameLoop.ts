@@ -169,6 +169,7 @@ export class GameLoop {
       winterSurvivalRate: a.winterSurvivalRate,
       initialGeneAverages: a.initialGeneAverages ? { ...a.initialGeneAverages } : null,
       finalGeneAverages: { ...a.geneAverages },
+      finalCarriedGeneAverages: { ...a.carriedGeneAverages },
       geneticDiversity: a.geneticDiversity,
       populationHistory: [...a.fullHistory],
       seasonsEnabled: this.currentConfig.seasonsEnabled,

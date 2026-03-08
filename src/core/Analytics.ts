@@ -2,6 +2,7 @@ import { EntityState, Sex } from './types';
 import { SimEvent, SimulationEngine } from './SimulationEngine';
 import { TribeRegistry } from './Tribe';
 import { Season } from './Seasons';
+import { decodeDNA } from './DNA';
 
 export interface TickSnapshot {
   total: number;
@@ -81,6 +82,8 @@ export class Analytics {
   // Current snapshot data
   currentSnapshot: TickSnapshot = { total: 0, males: 0, females: 0, births: 0, deaths: 0, avgEnergy: 0 };
   geneAverages: GeneAverages = { maxAge: 0, speed: 0, directionBias: 0, visionRange: 0, attack: 0, defense: 0, maxHP: 0, aggression: 0, foodAffinity: 0, fleeSpeed: 0, energyEfficiency: 0, fertilityBonus: 0, mutationResist: 0, cooperation: 0, storageCapacity: 0 };
+  carriedGeneAverages: GeneAverages = { maxAge: 0, speed: 0, directionBias: 0, visionRange: 0, attack: 0, defense: 0, maxHP: 0, aggression: 0, foodAffinity: 0, fleeSpeed: 0, energyEfficiency: 0, fertilityBonus: 0, mutationResist: 0, cooperation: 0, storageCapacity: 0 };
+  initialCarriedGeneAverages: GeneAverages | null = null;
   tribeCount = 0;
   avgTribeSize = 0;
   geneticDiversity = 0;
@@ -197,6 +200,21 @@ export class Analytics {
       // Capture initial gene averages on first call with alive entities
       if (this.initialGeneAverages === null) {
         this.initialGeneAverages = { ...this.geneAverages };
+      }
+
+      // Carried gene averages (true genetic values, ignoring activation)
+      const carriedSum: GeneAverages = { maxAge: 0, speed: 0, directionBias: 0, visionRange: 0, attack: 0, defense: 0, maxHP: 0, aggression: 0, foodAffinity: 0, fleeSpeed: 0, energyEfficiency: 0, fertilityBonus: 0, mutationResist: 0, cooperation: 0, storageCapacity: 0 };
+      for (const e of alive) {
+        const carried = decodeDNA(e.dna);
+        for (const key of Object.keys(carriedSum) as (keyof GeneAverages)[]) {
+          carriedSum[key] += carried[key] as number;
+        }
+      }
+      for (const key of Object.keys(carriedSum) as (keyof GeneAverages)[]) {
+        this.carriedGeneAverages[key] = carriedSum[key] / n;
+      }
+      if (this.initialCarriedGeneAverages === null) {
+        this.initialCarriedGeneAverages = { ...this.carriedGeneAverages };
       }
     }
 
@@ -328,6 +346,7 @@ export class Analytics {
     this.peakPopulationTick = 0;
     this.totalBirths = 0;
     this.initialGeneAverages = null;
+    this.initialCarriedGeneAverages = null;
     this.fullHistory = [];
     this.childrenCount.clear();
     this.entityRecords.clear();

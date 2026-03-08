@@ -40,6 +40,7 @@ export interface EntityState {
   tribeId: number | null;
   foodStorage: number;
   lastBirthTick: number;
+  geneActive: boolean[];  // 16 booleans, true = expressed, false = passive
 }
 
 export interface FoodState {

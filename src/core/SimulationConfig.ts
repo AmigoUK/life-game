@@ -38,7 +38,7 @@ export const DEFAULT_CONFIG: SimulationConfig = {
   maxSpeed: 1.0,
   hungerSlowdown: true,
   environmentalEvents: false,
-  tribesEnabled: false,
+  tribesEnabled: true,
   maxTribeSize: 6,
   seasonsEnabled: true,
   seasonLength: 50,

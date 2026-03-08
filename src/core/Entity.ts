@@ -1,5 +1,5 @@
 import { EntityState, HexCoord, Sex } from './types';
-import { generateRandomDNA, decodeDNA } from './DNA';
+import { generateRandomDNA, decodeExpressedDNA, generateGeneActivation } from './DNA';
 
 let nextId = 1;
 
@@ -72,9 +72,11 @@ export function createEntity(
   energy?: number,
   initialEnergy = 60,
   aggressionBias?: [number, number],
+  geneActive?: boolean[],
 ): EntityState {
   const finalDna = dna ?? generateRandomDNA(aggressionBias);
-  const decoded = decodeDNA(finalDna);
+  const finalActivation = geneActive ?? generateGeneActivation();
+  const decoded = decodeExpressedDNA(finalDna, finalActivation);
   const id = nextId++;
   return {
     id,
@@ -91,6 +93,7 @@ export function createEntity(
     tribeId: null,
     foodStorage: 0,
     lastBirthTick: -1,
+    geneActive: finalActivation,
   };
 }
 

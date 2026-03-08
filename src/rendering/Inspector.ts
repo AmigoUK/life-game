@@ -1,5 +1,5 @@
 import { EntityState } from '../core/types';
-import { DNA_RANGES } from '../core/constants';
+import { DNA_RANGES, PASSIVE_RAW_DEFAULTS } from '../core/constants';
 import { TribeRegistry } from '../core/Tribe';
 
 const DNA_LABELS = [
@@ -43,7 +43,7 @@ export class Inspector {
   isClickInPanel(px: number, py: number): boolean {
     if (!this.selected) return false;
     const { x, y } = this.getPanelPos();
-    return px >= x && px <= x + 220 && py >= y && py <= y + 520;
+    return px >= x && px <= x + 230 && py >= y && py <= y + 530;
   }
 
   private getPanelPos(): { x: number; y: number } {
@@ -61,8 +61,8 @@ export class Inspector {
     }
 
     const { x, y: startY } = this.getPanelPos();
-    const w = 220;
-    const h = 520;
+    const w = 230;
+    const h = 530;
 
     // Clamp to canvas
     const cx = Math.min(x, ctx.canvas.width - w - 8);
@@ -145,21 +145,37 @@ export class Inspector {
     yy += 14;
 
     for (let i = 0; i < e.dna.length && i < DNA_LABELS.length; i++) {
+      const isActive = e.geneActive[i];
       const [min, max] = DNA_RANGES[i];
       const decoded = min + e.dna[i] * (max - min);
       const ratio = e.dna[i];
 
-      // Label + bar + value
-      ctx.fillStyle = '#999';
+      // Label with (P) marker for passive genes
+      ctx.fillStyle = isActive ? '#999' : '#555';
       ctx.font = '9px monospace';
-      ctx.fillText(DNA_LABELS[i], lx, yy);
-      this.drawBar(ctx, lx + 68, yy - 7, 80, 7, ratio, DNA_COLORS[i]);
-      ctx.fillStyle = '#777';
-      ctx.fillText(decoded.toFixed(1), lx + 155, yy);
+      const label = isActive ? DNA_LABELS[i] : `${DNA_LABELS[i]}(P)`;
+      ctx.fillText(label, lx, yy);
+
+      // Bar: dimmed for passive genes
+      if (isActive) {
+        this.drawBar(ctx, lx + 68, yy - 7, 80, 7, ratio, DNA_COLORS[i]);
+        ctx.fillStyle = '#777';
+        ctx.fillText(decoded.toFixed(1), lx + 155, yy);
+      } else {
+        // Show passive default bar dimmed, plus carried value
+        const passiveRatio = PASSIVE_RAW_DEFAULTS[i];
+        ctx.globalAlpha = 0.35;
+        this.drawBar(ctx, lx + 68, yy - 7, 80, 7, passiveRatio, DNA_COLORS[i]);
+        ctx.globalAlpha = 1;
+        const passiveVal = min + PASSIVE_RAW_DEFAULTS[i] * (max - min);
+        ctx.fillStyle = '#555';
+        ctx.font = '8px monospace';
+        ctx.fillText(`${passiveVal.toFixed(1)}(${decoded.toFixed(1)})`, lx + 152, yy);
+      }
       yy += 11;
 
       // Description in muted smaller text
-      ctx.fillStyle = '#555';
+      ctx.fillStyle = isActive ? '#555' : '#3a3a3a';
       ctx.font = '8px monospace';
       ctx.fillText(DNA_DESCRIPTIONS[i], lx + 4, yy);
       yy += 9;

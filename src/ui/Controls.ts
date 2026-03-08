@@ -436,13 +436,18 @@ export class Controls {
       { key: 'storageCapacity', label: 'Storage', max: 100, color: '#ffab40' },
     ];
 
+    const carried = analytics.carriedGeneAverages;
     for (const g of geneConfig) {
       const row = el('div', { style: 'display:flex;align-items:center;gap:4px;margin-bottom:2px;' });
       const label = el('span', { style: `width:50px;font-size:11px;color:${g.color};` }, g.label);
-      const barOuter = el('div', { style: 'flex:1;height:8px;background:#333;border-radius:2px;overflow:hidden;' });
+      const barOuter = el('div', { style: 'flex:1;height:8px;background:#333;border-radius:2px;overflow:hidden;position:relative;' });
+      // Ghost bar: carried average (faint, behind)
+      const carriedRatio = Math.min(1, carried[g.key] / g.max);
+      const ghostBar = el('div', { style: `position:absolute;top:0;left:0;width:${(carriedRatio * 100).toFixed(1)}%;height:100%;background:${g.color};opacity:0.2;border-radius:2px;` });
+      // Expressed bar (solid, on top)
       const ratio = Math.min(1, genes[g.key] / g.max);
-      const barInner = el('div', { style: `width:${(ratio * 100).toFixed(1)}%;height:100%;background:${g.color};border-radius:2px;` });
-      barOuter.appendChild(barInner);
+      const barInner = el('div', { style: `position:absolute;top:0;left:0;width:${(ratio * 100).toFixed(1)}%;height:100%;background:${g.color};border-radius:2px;` });
+      barOuter.append(ghostBar, barInner);
       const val = el('span', { style: 'width:32px;font-size:10px;text-align:right;color:#888;' }, genes[g.key].toFixed(2));
       row.append(label, barOuter, val);
       this.genePoolEl.appendChild(row);
