@@ -1,6 +1,6 @@
 import { EntityState, FoodState, HexCoord } from './types';
 import { HexGrid } from './HexGrid';
-import { createEntity, resetEntityIdCounter } from './Entity';
+import { createEntity, resetEntityIdCounter, resetNamePools, recycleName } from './Entity';
 import { createFood, consumeFood, tickFood, resetFoodIdCounter } from './Food';
 import { crossover, mutate } from './DNA';
 import { SimulationConfig } from './SimulationConfig';
@@ -54,6 +54,7 @@ export class SimulationEngine {
 
   init(): void {
     resetEntityIdCounter();
+    resetNamePools();
     resetFoodIdCounter();
     this.entities = [];
     this.foods = [];
@@ -86,7 +87,8 @@ export class SimulationEngine {
       if (changed) {
         this.bannerCallback?.(`${state.current} — Year ${state.year}`);
         if (state.current === 'spring') {
-          for (let i = 0; i < 10; i++) {
+          const springBonus = Math.ceil(cfg.initialFoodCount * 0.25);
+          for (let i = 0; i < springBonus; i++) {
             this.foods.push(createFood(this.grid.randomCell(), cfg.foodEnergy));
           }
         }
@@ -203,7 +205,15 @@ export class SimulationEngine {
         const a = alive[i];
         const b = alive[j];
         if (!a.alive || !b.alive) continue;
-        if (!HexGrid.equals(a.pos, b.pos)) continue;
+
+        const dist = HexGrid.distance(a.pos, b.pos);
+
+        // Reproduction: adjacent hex (distance <= 1); Combat: same hex only
+        if (a.sex !== b.sex) {
+          if (dist > 1) continue;
+        } else {
+          if (dist > 0) continue;
+        }
 
         const pairKey = `${Math.min(a.id, b.id)}-${Math.max(a.id, b.id)}`;
         if (checked.has(pairKey)) continue;
@@ -222,18 +232,42 @@ export class SimulationEngine {
       this.tickTribes();
     }
 
-    // Phase 5: Food respawn (frozen during winter)
+    // Phase 5: Food respawn (slowed during winter, not frozen)
     const isWinter = this.config.seasonsEnabled && this.seasonManager?.isWinter();
-    if (!isWinter) {
+    if (isWinter) {
+      // Winter: food respawns at half rate (tick every other tick)
+      if (this.tickCount % 2 === 0) {
+        for (const food of this.foods) {
+          tickFood(food);
+        }
+      }
+    } else {
       for (const food of this.foods) {
         tickFood(food);
       }
     }
 
+    // Dynamic food spawning: prevent food deserts
+    const availableFood = this.foods.filter(f => !f.consumed).length;
+    const foodThreshold = Math.floor(cfg.initialFoodCount * 0.3);
+    if (availableFood < foodThreshold) {
+      const toSpawn = Math.min(2, cfg.initialFoodCount - this.foods.length);
+      for (let i = 0; i < toSpawn; i++) {
+        this.foods.push(createFood(this.grid.randomCell(), cfg.foodEnergy));
+      }
+    }
+
+    // Emergency food for near-extinct populations
+    const aliveCount = this.entities.filter(e => e.alive).length;
+    if (aliveCount > 0 && aliveCount < 5 && this.tickCount % 10 === 0) {
+      this.foods.push(createFood(this.grid.randomCell(), cfg.foodEnergy));
+    }
+
     // Phase 6: Cleanup dead
-    if (cfg.tribesEnabled) {
-      for (const e of this.entities) {
-        if (!e.alive && e.tribeId !== null) {
+    for (const e of this.entities) {
+      if (!e.alive) {
+        recycleName(e.name, e.sex);
+        if (cfg.tribesEnabled && e.tribeId !== null) {
           this.tribeRegistry.removeMember(e);
         }
       }
@@ -274,7 +308,8 @@ export class SimulationEngine {
       return;
     }
 
-    const seekFood = Math.random() < e.decoded.foodAffinity || e.energy < 30;
+    const wellFed = e.energy > this.config.maxEnergy * 0.7;
+    const seekFood = wellFed ? false : (Math.random() < e.decoded.foodAffinity || e.energy < 30);
 
     if (seekFood) {
       const nearbyFood = this.foods.filter(f =>
@@ -345,12 +380,9 @@ export class SimulationEngine {
   private tryReproduce(a: EntityState, b: EntityState): void {
     const cfg = this.config;
 
-    // Female can only give birth once per season
-    if (this.config.seasonsEnabled && this.seasonManager) {
-      const female = a.sex === 'F' ? a : b;
-      const currentSeason = this.seasonManager.getState().totalSeasonsPassed;
-      if (female.lastBirthSeason === currentSeason) return;
-    }
+    // Gestation cooldown: female must wait N ticks between births
+    const female = a.sex === 'F' ? a : b;
+    if (female.lastBirthTick >= 0 && this.tickCount - female.lastBirthTick < cfg.gestationCooldown) return;
 
     const costA = cfg.reproductionEnergyCost * (1 - a.decoded.fertilityBonus);
     const costB = cfg.reproductionEnergyCost * (1 - b.decoded.fertilityBonus);
@@ -378,10 +410,7 @@ export class SimulationEngine {
     this.entities.push(child);
     this.emit({ type: 'reproduce', pos: { ...a.pos }, parentIds: [a.id, b.id] });
 
-    if (this.config.seasonsEnabled && this.seasonManager) {
-      const female = a.sex === 'F' ? a : b;
-      female.lastBirthSeason = this.seasonManager.getState().totalSeasonsPassed;
-    }
+    female.lastBirthTick = this.tickCount;
   }
 
   private handleSameSexEncounter(a: EntityState, b: EntityState): void {

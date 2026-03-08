@@ -8,6 +8,7 @@ import { EffectsRenderer } from './EffectsRenderer';
 import { Inspector } from './Inspector';
 import { HeatmapRenderer, HeatmapMode } from './HeatmapRenderer';
 import { TribeRegistry } from '../core/Tribe';
+import { EndScreen } from './EndScreen';
 
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
@@ -19,6 +20,7 @@ export class Renderer {
   private effectsRenderer = new EffectsRenderer();
   private inspector = new Inspector();
   private heatmapRenderer = new HeatmapRenderer();
+  private endScreen = new EndScreen();
   private gridImageCache: ImageData | null = null;
   private heatmapEnabled = false;
   private heatmapMode: HeatmapMode = 'population';
@@ -31,6 +33,12 @@ export class Renderer {
     this.resize();
     window.addEventListener('resize', () => this.resize());
     this.setupClickHandler();
+    this.canvas.addEventListener('wheel', (e) => {
+      if (this.endScreen.isVisible()) {
+        e.preventDefault();
+        this.endScreen.handleScroll(e.deltaY, this.canvas.height);
+      }
+    }, { passive: false });
   }
 
   private resize(): void {
@@ -80,6 +88,11 @@ export class Renderer {
     this.effectsRenderer.draw(ctx, grid, size, cx, cy);
     this.uiOverlay.draw(ctx, tick, entities);
     this.inspector.draw(ctx, this.tribeRegistry ?? undefined);
+    this.endScreen.draw(ctx);
+  }
+
+  getEndScreen(): EndScreen {
+    return this.endScreen;
   }
 
   getEffects(): EffectsRenderer {
@@ -116,6 +129,12 @@ export class Renderer {
       const rect = this.canvas.getBoundingClientRect();
       const px = e.clientX - rect.left;
       const py = e.clientY - rect.top;
+
+      // End screen intercepts all clicks when visible
+      if (this.endScreen.isVisible()) {
+        this.endScreen.handleClick(px, py);
+        return;
+      }
 
       // Check if clicking inside inspector panel (close button area)
       if (this.inspector.getSelected()) {

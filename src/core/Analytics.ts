@@ -20,16 +20,26 @@ export interface DeathStats {
 }
 
 export interface GeneAverages {
+  maxAge: number;
   speed: number;
-  aggression: number;
+  directionBias: number;
   visionRange: number;
   attack: number;
   defense: number;
+  maxHP: number;
+  aggression: number;
+  foodAffinity: number;
+  fleeSpeed: number;
+  energyEfficiency: number;
+  fertilityBonus: number;
+  mutationResist: number;
   cooperation: number;
+  storageCapacity: number;
 }
 
 export interface EntityRecord {
   id: number;
+  name: string;
   sex: Sex;
   generation: number;
   age: number;
@@ -61,9 +71,16 @@ export class Analytics {
   deathCauses: DeathStats = { starvation: 0, age: 0, combat: 0 };
   totalDeaths = 0;
 
+  // Peak tracking & end screen data
+  peakPopulation = 0;
+  peakPopulationTick = 0;
+  totalBirths = 0;
+  initialGeneAverages: GeneAverages | null = null;
+  fullHistory: TickSnapshot[] = [];
+
   // Current snapshot data
   currentSnapshot: TickSnapshot = { total: 0, males: 0, females: 0, births: 0, deaths: 0, avgEnergy: 0 };
-  geneAverages: GeneAverages = { speed: 0, aggression: 0, visionRange: 0, attack: 0, defense: 0, cooperation: 0 };
+  geneAverages: GeneAverages = { maxAge: 0, speed: 0, directionBias: 0, visionRange: 0, attack: 0, defense: 0, maxHP: 0, aggression: 0, foodAffinity: 0, fleeSpeed: 0, energyEfficiency: 0, fertilityBonus: 0, mutationResist: 0, cooperation: 0, storageCapacity: 0 };
   tribeCount = 0;
   avgTribeSize = 0;
   geneticDiversity = 0;
@@ -93,6 +110,7 @@ export class Analytics {
   handleEvent(event: SimEvent, season?: Season): void {
     if (event.type === 'reproduce') {
       this.birthsThisTick++;
+      this.totalBirths++;
       if (event.parentIds) {
         for (const pid of event.parentIds) {
           this.childrenCount.set(pid, (this.childrenCount.get(pid) ?? 0) + 1);
@@ -121,7 +139,7 @@ export class Analytics {
     this.currentSeason = season;
   }
 
-  update(entities: EntityState[], foods: { consumed: boolean }[]): void {
+  update(entities: EntityState[], foods: { consumed: boolean }[], tick: number): void {
     const alive = entities.filter(e => e.alive);
     const males = alive.filter(e => e.sex === 'M').length;
     const females = alive.filter(e => e.sex === 'F').length;
@@ -139,6 +157,12 @@ export class Analytics {
       avgEnergy,
     };
 
+    // Peak population tracking
+    if (alive.length > this.peakPopulation) {
+      this.peakPopulation = alive.length;
+      this.peakPopulationTick = tick;
+    }
+
     // Energy stats
     if (alive.length > 0) {
       this.minEnergy = alive.reduce((m, e) => Math.min(m, e.energy), Infinity);
@@ -152,8 +176,8 @@ export class Analytics {
 
     // Gene averages
     if (alive.length > 0) {
-      const sum = { speed: 0, aggression: 0, visionRange: 0, attack: 0, defense: 0, cooperation: 0 };
-      const sumSq = { speed: 0, aggression: 0, visionRange: 0, attack: 0, defense: 0, cooperation: 0 };
+      const sum: GeneAverages = { maxAge: 0, speed: 0, directionBias: 0, visionRange: 0, attack: 0, defense: 0, maxHP: 0, aggression: 0, foodAffinity: 0, fleeSpeed: 0, energyEfficiency: 0, fertilityBonus: 0, mutationResist: 0, cooperation: 0, storageCapacity: 0 };
+      const sumSq: GeneAverages = { maxAge: 0, speed: 0, directionBias: 0, visionRange: 0, attack: 0, defense: 0, maxHP: 0, aggression: 0, foodAffinity: 0, fleeSpeed: 0, energyEfficiency: 0, fertilityBonus: 0, mutationResist: 0, cooperation: 0, storageCapacity: 0 };
       for (const e of alive) {
         for (const key of Object.keys(sum) as (keyof GeneAverages)[]) {
           const val = e.decoded[key] as number;
@@ -169,6 +193,11 @@ export class Analytics {
         totalVariance += variance;
       }
       this.geneticDiversity = Math.sqrt(totalVariance / Object.keys(sum).length);
+
+      // Capture initial gene averages on first call with alive entities
+      if (this.initialGeneAverages === null) {
+        this.initialGeneAverages = { ...this.geneAverages };
+      }
     }
 
     // Generation
@@ -190,6 +219,7 @@ export class Analytics {
       const children = this.childrenCount.get(e.id) ?? 0;
       this.entityRecords.set(e.id, {
         id: e.id,
+        name: e.name,
         sex: e.sex,
         generation: e.generation,
         age: e.age,
@@ -208,10 +238,10 @@ export class Analytics {
       }
     }
 
-    // Extract top 3
+    // Extract full ranking (up to 50)
     const allRecords = [...this.entityRecords.values()];
     allRecords.sort((a, b) => b.score - a.score);
-    this.hallOfFame = allRecords.slice(0, 3);
+    this.hallOfFame = allRecords.slice(0, 50);
 
     // Prune: keep top 50 + all alive
     if (this.entityRecords.size > 100) {
@@ -226,6 +256,11 @@ export class Analytics {
     // Push to history (include season)
     this.currentSnapshot.season = this.currentSeason;
     this.history.push({ ...this.currentSnapshot });
+
+    // Sample to fullHistory every 10 ticks for end screen timeline
+    if (tick % 10 === 0) {
+      this.fullHistory.push({ ...this.currentSnapshot });
+    }
     if (this.history.length > this.maxHistory) {
       this.history.shift();
     }
@@ -289,6 +324,11 @@ export class Analytics {
     this.deathsThisTick = 0;
     this.deathCauses = { starvation: 0, age: 0, combat: 0 };
     this.totalDeaths = 0;
+    this.peakPopulation = 0;
+    this.peakPopulationTick = 0;
+    this.totalBirths = 0;
+    this.initialGeneAverages = null;
+    this.fullHistory = [];
     this.childrenCount.clear();
     this.entityRecords.clear();
     this.hallOfFame = [];

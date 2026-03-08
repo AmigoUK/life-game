@@ -89,6 +89,7 @@ export class Controls {
     this.pendingConfig = { ...gameLoop.getConfig() };
     this.build();
     this.setupKeyboard();
+    this.gameLoop.onReset(() => this.syncToggleButton());
   }
 
   private build(): void {
@@ -418,12 +419,21 @@ export class Controls {
     this.genePoolEl.textContent = '';
     const genes = analytics.geneAverages;
     const geneConfig: { key: keyof GeneAverages; label: string; max: number; color: string }[] = [
+      { key: 'maxAge', label: 'Lifespan', max: 160, color: '#8bc34a' },
       { key: 'speed', label: 'Speed', max: 1, color: '#4fc3f7' },
-      { key: 'aggression', label: 'Aggr', max: 1, color: '#ef5350' },
+      { key: 'directionBias', label: 'Direction', max: 1, color: '#ffb74d' },
       { key: 'visionRange', label: 'Vision', max: 4, color: '#ab47bc' },
       { key: 'attack', label: 'Attack', max: 20, color: '#ff7043' },
       { key: 'defense', label: 'Defense', max: 20, color: '#66bb6a' },
-      { key: 'cooperation', label: 'Coop', max: 1, color: '#26c6da' },
+      { key: 'maxHP', label: 'Health', max: 100, color: '#ef5350' },
+      { key: 'aggression', label: 'Aggr', max: 1, color: '#e53935' },
+      { key: 'foodAffinity', label: 'Foraging', max: 1, color: '#81c784' },
+      { key: 'fleeSpeed', label: 'Flee', max: 0.5, color: '#29b6f6' },
+      { key: 'energyEfficiency', label: 'Efficiency', max: 1, color: '#aed581' },
+      { key: 'fertilityBonus', label: 'Fertility', max: 0.5, color: '#f48fb1' },
+      { key: 'mutationResist', label: 'Stability', max: 0.5, color: '#90a4ae' },
+      { key: 'cooperation', label: 'Coop', max: 1, color: '#78909c' },
+      { key: 'storageCapacity', label: 'Storage', max: 100, color: '#ffab40' },
     ];
 
     for (const g of geneConfig) {
@@ -568,9 +578,11 @@ export class Controls {
     document.addEventListener('keydown', (e) => {
       if (e.code === 'Space') {
         e.preventDefault();
+        if (this.gameLoop.isEndScreenVisible()) return;
         this.toggleSim();
       } else if (e.code === 'ArrowRight') {
         e.preventDefault();
+        if (this.gameLoop.isEndScreenVisible()) return;
         this.gameLoop.stepOnce();
       } else if (e.code === 'KeyH') {
         const enabled = !this.renderer.isHeatmapEnabled();

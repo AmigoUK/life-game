@@ -5,7 +5,7 @@ export const MIN_TICK_MS = 50;
 export const MAX_TICK_MS = 1000;
 
 export const DNA_RANGES: [number, number][] = [
-  [40, 78],     // 0: maxAge
+  [80, 160],    // 0: maxAge
   [0.2, 1.0],   // 1: speed
   [0, 1],       // 2: directionBias
   [1, 4],       // 3: visionRange
@@ -16,7 +16,7 @@ export const DNA_RANGES: [number, number][] = [
   [0, 1],       // 8: foodAffinity
   [0, 0.5],     // 9: fleeSpeed
   [0.5, 1.0],   // 10: energyEfficiency
-  [0, 0.3],     // 11: fertilityBonus
+  [0, 0.5],     // 11: fertilityBonus
   [0, 0.5],     // 12: mutationResist
   [0, 360],     // 13: hue (cosmetic)
   [0, 1],       // 14: cooperation

@@ -18,6 +18,7 @@ export interface SimulationConfig {
   maxTribeSize: number;
   seasonsEnabled: boolean;
   seasonLength: number;
+  gestationCooldown: number;
   aggressionBias?: [number, number];
 }
 
@@ -26,7 +27,7 @@ export const DEFAULT_CONFIG: SimulationConfig = {
   initialPopulation: 30,
   initialFoodCount: 40,
   foodEnergy: 30,
-  foodRespawnTicks: 80,
+  foodRespawnTicks: 40,
   energyPerTick: 0.5,
   reproductionEnergyCost: 40,
   initialEnergy: 60,
@@ -41,18 +42,19 @@ export const DEFAULT_CONFIG: SimulationConfig = {
   maxTribeSize: 6,
   seasonsEnabled: true,
   seasonLength: 50,
+  gestationCooldown: 25,
 };
 
 export const SCENARIO_PRESETS: Record<string, Partial<SimulationConfig>> = {
   'Default': {},
   'Scarce Resources': {
     initialFoodCount: 15,
-    foodRespawnTicks: 160,
-    foodEnergy: 20,
+    foodRespawnTicks: 80,
+    foodEnergy: 25,
   },
   'Overpopulation': {
     initialPopulation: 80,
-    initialFoodCount: 20,
+    initialFoodCount: 40,
   },
   'Predator World': {
     aggressionBias: [0.6, 1.0],
@@ -71,8 +73,8 @@ export const SCENARIO_PRESETS: Record<string, Partial<SimulationConfig>> = {
     mutationAmount: 0.25,
   },
   'Survival Mode': {
-    energyPerTick: 1.0,
-    foodEnergy: 15,
+    energyPerTick: 0.7,
+    foodEnergy: 20,
     reproductionEnergyCost: 60,
     initialEnergy: 40,
   },

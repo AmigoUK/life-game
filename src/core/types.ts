@@ -28,6 +28,7 @@ export interface DecodedDNA {
 export interface EntityState {
   id: number;
   sex: Sex;
+  name: string;
   pos: HexCoord;
   dna: number[];
   decoded: DecodedDNA;
@@ -38,7 +39,7 @@ export interface EntityState {
   alive: boolean;
   tribeId: number | null;
   foodStorage: number;
-  lastBirthSeason: number;
+  lastBirthTick: number;
 }
 
 export interface FoodState {

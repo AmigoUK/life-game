@@ -88,7 +88,7 @@ export class Inspector {
     // Header
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 12px monospace';
-    ctx.fillText(`Entity #${e.id}  ${e.sex === 'M' ? '\u2642' : '\u2640'}  Gen ${e.generation}`, lx, yy);
+    ctx.fillText(`${e.name}  ${e.sex === 'M' ? '\u2642' : '\u2640'}  Gen ${e.generation}`, lx, yy);
     yy += 18;
 
     // Basic stats

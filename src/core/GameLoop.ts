@@ -1,6 +1,7 @@
 import { SimulationEngine } from './SimulationEngine';
 import { Analytics } from './Analytics';
 import { Renderer } from '../rendering/Renderer';
+import { EndScreenData } from '../rendering/EndScreen';
 import { SimulationConfig } from './SimulationConfig';
 import { TICK_INTERVAL_MS } from './constants';
 import { Season } from './Seasons';
@@ -15,6 +16,7 @@ export class GameLoop {
   private analytics = new Analytics();
   private currentConfig: SimulationConfig;
   private prevSeason: Season | undefined;
+  private resetCallbacks: (() => void)[] = [];
 
   constructor(engine: SimulationEngine, renderer: Renderer) {
     this.engine = engine;
@@ -94,8 +96,16 @@ export class GameLoop {
       this.prevSeason = state.current;
     }
 
-    this.analytics.update(this.engine.entities, this.engine.foods);
+    this.analytics.update(this.engine.entities, this.engine.foods, this.engine.tickCount);
     this.analytics.updateTribes(this.engine.tribeRegistry, this.engine);
+
+    // Extinction detection
+    const aliveCount = this.engine.entities.filter(e => e.alive).length;
+    if (aliveCount === 0 && this.analytics.totalDeaths > 0) {
+      this.triggerExtinction();
+      return;
+    }
+
     this.renderer.getUIOverlay().tribeCount = this.engine.tribeRegistry.tribes.size;
     this.renderer.getEffects().tick();
     this.renderer.advanceFoodTick();
@@ -104,6 +114,8 @@ export class GameLoop {
 
   reset(config?: SimulationConfig): void {
     this.stop();
+    this.prevSeason = undefined;
+    this.renderer.getEndScreen().hide();
     if (config) {
       this.currentConfig = config;
       this.engine = new SimulationEngine(config);
@@ -125,6 +137,59 @@ export class GameLoop {
 
   getEngine(): SimulationEngine {
     return this.engine;
+  }
+
+  isEndScreenVisible(): boolean {
+    return this.renderer.getEndScreen().isVisible();
+  }
+
+  onReset(cb: () => void): void {
+    this.resetCallbacks.push(cb);
+  }
+
+  private triggerExtinction(): void {
+    this.stop();
+
+    const a = this.analytics;
+    const seasonState = this.engine.seasonManager?.getState() ?? null;
+
+    const data: EndScreenData = {
+      totalTicks: this.engine.tickCount,
+      seasonState,
+      deathCauses: { ...a.deathCauses },
+      deathCausePercents: a.getDeathCausePercents(),
+      totalDeaths: a.totalDeaths,
+      totalBirths: a.totalBirths,
+      peakPopulation: a.peakPopulation,
+      peakPopulationTick: a.peakPopulationTick,
+      hallOfFame: [...a.hallOfFame],
+      tribeRanking: [...a.tribeRanking],
+      birthsBySeason: { ...a.birthsBySeason },
+      starvationsBySeason: { ...a.starvationsBySeason },
+      winterSurvivalRate: a.winterSurvivalRate,
+      initialGeneAverages: a.initialGeneAverages ? { ...a.initialGeneAverages } : null,
+      finalGeneAverages: { ...a.geneAverages },
+      geneticDiversity: a.geneticDiversity,
+      populationHistory: [...a.fullHistory],
+      seasonsEnabled: this.currentConfig.seasonsEnabled,
+      tribesEnabled: this.currentConfig.tribesEnabled,
+    };
+
+    this.renderer.getEndScreen().show(data, () => this.onNewGame());
+    this.renderLoop();
+  }
+
+  private renderLoop(): void {
+    if (this.running || !this.renderer.getEndScreen().isVisible()) return;
+    this.renderer.getEndScreen().tick();
+    this.render();
+    requestAnimationFrame(() => this.renderLoop());
+  }
+
+  private onNewGame(): void {
+    this.renderer.getEndScreen().hide();
+    this.reset(this.currentConfig);
+    for (const cb of this.resetCallbacks) cb();
   }
 
   private loop(now: number): void {

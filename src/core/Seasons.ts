@@ -33,7 +33,7 @@ export class SeasonManager {
     let changed = false;
 
     if (this.tickInSeason > this.seasonLength) {
-      this.tickInSeason = 1;
+      this.tickInSeason = 0;
       this.totalSeasonsPassed++;
       this.seasonIndex = (this.seasonIndex + 1) % 4;
       if (this.seasonIndex === 0) {
