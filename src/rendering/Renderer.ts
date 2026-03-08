@@ -7,6 +7,7 @@ import { UIOverlay } from './UIOverlay';
 import { EffectsRenderer } from './EffectsRenderer';
 import { Inspector } from './Inspector';
 import { HeatmapRenderer, HeatmapMode } from './HeatmapRenderer';
+import { TribeRegistry } from '../core/Tribe';
 
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
@@ -22,6 +23,7 @@ export class Renderer {
   private heatmapEnabled = false;
   private heatmapMode: HeatmapMode = 'population';
   private lastEntities: EntityState[] = [];
+  private tribeRegistry: TribeRegistry | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -35,6 +37,10 @@ export class Renderer {
     this.canvas.width = window.innerWidth;
     this.canvas.height = window.innerHeight;
     this.gridImageCache = null;
+  }
+
+  setTribeRegistry(registry: TribeRegistry): void {
+    this.tribeRegistry = registry;
   }
 
   configure(grid: HexGrid): void {
@@ -67,12 +73,13 @@ export class Renderer {
     }
 
     for (const entity of entities) {
-      this.entityRenderer.draw(ctx, entity, grid, size, cx, cy);
+      const tribeColor = this.tribeRegistry ? this.tribeRegistry.getTribeColor(entity.id) : null;
+      this.entityRenderer.draw(ctx, entity, grid, size, cx, cy, tribeColor);
     }
 
     this.effectsRenderer.draw(ctx, grid, size, cx, cy);
     this.uiOverlay.draw(ctx, tick, entities);
-    this.inspector.draw(ctx);
+    this.inspector.draw(ctx, this.tribeRegistry ?? undefined);
   }
 
   getEffects(): EffectsRenderer {

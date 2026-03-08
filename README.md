@@ -9,7 +9,7 @@ Entities with DNA-encoded traits live on a hex grid, seeking food, reproducing, 
 ## Features
 
 - **Hexagonal grid** with configurable radius (8-24)
-- **Genetic system** — 16-gene DNA encoding traits: speed, aggression, vision, attack, defense, energy efficiency, size, color hue, and more
+- **Genetic system** — 15-gene DNA encoding traits: speed, aggression, vision, attack, defense, energy efficiency, cooperation, color hue, and more
 - **Reproduction** — crossover + mutation with heritable mutation resistance
 - **Combat** — aggressive same-sex encounters with attack/defense rolls
 - **Food ecosystem** — consumable food with respawn timers and pulsating visuals
@@ -17,13 +17,18 @@ Entities with DNA-encoded traits live on a hex grid, seeking food, reproducing, 
   - Males (blue triangles up) vs Females (red-orange triangles down)
   - Energy borders: white = healthy, yellow = hungry
   - Aggression spikes on aggressive entities
-  - Size reflects energy, opacity reflects age
+  - Opacity reflects age
   - DNA hue creates visible genetic family lineages
+  - Tribe membership shown with colored dots
+- **Tribes & cooperation** — cooperative entities form tribes with football team names (Real Madrid, Barcelona, Liverpool, etc.), share food, and defend each other in combat
 - **Canvas legend** — bottom-left overlay explaining all visual elements
 - **Analytics panel** with collapsible sections:
   - Population breakdown (M/F, births/deaths per tick, death causes)
   - Gene pool bars showing average trait values with genetic diversity index
-  - Real-time sparkline chart (population history, last 200 ticks)
+  - Real-time sparkline chart with Y-axis scale labels and colored legend
+  - Hall of Fame — top 3 most successful entities ranked by age + offspring score
+  - Tribe Ranking — tribes sorted by score with kill/food-sharing stats
+- **Entity inspector** — click any entity to see detailed stats with descriptive gene labels and one-line explanations
 - **Animated effects** — floating skull, heart, and sword icons for deaths, births, and combat
 
 ## Tech Stack
@@ -59,9 +64,10 @@ src/
     DNA.ts            # Gene encoding, crossover, mutation
     Entity.ts         # Entity factory
     Food.ts           # Food creation, consumption, respawn
-    SimulationEngine.ts  # Core tick loop: aging, movement, eating, combat, reproduction
+    Tribe.ts          # Tribe registry, football team names, membership lifecycle
+    SimulationEngine.ts  # Core tick loop: aging, movement, eating, combat, reproduction, tribes
     GameLoop.ts       # RAF loop, tick timing, renderer orchestration
-    Analytics.ts      # Statistics collection, history buffer, gene tracking
+    Analytics.ts      # Statistics, history, gene tracking, Hall of Fame, tribe ranking
   rendering/
     Renderer.ts       # Main renderer orchestrating sub-renderers
     HexRenderer.ts    # Grid drawing with cached ImageData

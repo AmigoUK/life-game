@@ -25,6 +25,7 @@ export function createEntity(
     hp: decoded.maxHP,
     generation,
     alive: true,
+    tribeId: null,
   };
 }
 

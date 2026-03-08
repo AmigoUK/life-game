@@ -1,5 +1,6 @@
-import { EntityState } from './types';
-import { SimEvent } from './SimulationEngine';
+import { EntityState, Sex } from './types';
+import { SimEvent, SimulationEngine } from './SimulationEngine';
+import { TribeRegistry } from './Tribe';
 
 export interface TickSnapshot {
   total: number;
@@ -22,6 +23,28 @@ export interface GeneAverages {
   visionRange: number;
   attack: number;
   defense: number;
+  cooperation: number;
+}
+
+export interface EntityRecord {
+  id: number;
+  sex: Sex;
+  generation: number;
+  age: number;
+  children: number;
+  score: number;
+  dna: number[];
+  alive: boolean;
+}
+
+export interface TribeRankEntry {
+  id: number;
+  name: string;
+  color: string;
+  members: number;
+  kills: number;
+  foodShared: number;
+  score: number;
 }
 
 export class Analytics {
@@ -38,7 +61,9 @@ export class Analytics {
 
   // Current snapshot data
   currentSnapshot: TickSnapshot = { total: 0, males: 0, females: 0, births: 0, deaths: 0, avgEnergy: 0 };
-  geneAverages: GeneAverages = { speed: 0, aggression: 0, visionRange: 0, attack: 0, defense: 0 };
+  geneAverages: GeneAverages = { speed: 0, aggression: 0, visionRange: 0, attack: 0, defense: 0, cooperation: 0 };
+  tribeCount = 0;
+  avgTribeSize = 0;
   geneticDiversity = 0;
   hungryPercent = 0;
   minEnergy = 0;
@@ -47,9 +72,22 @@ export class Analytics {
   foodAvailable = 0;
   foodConsumed = 0;
 
+  // Hall of Fame
+  childrenCount = new Map<number, number>();
+  private entityRecords = new Map<number, EntityRecord>();
+  hallOfFame: EntityRecord[] = [];
+
+  // Tribe ranking
+  tribeRanking: TribeRankEntry[] = [];
+
   handleEvent(event: SimEvent): void {
     if (event.type === 'reproduce') {
       this.birthsThisTick++;
+      if (event.parentIds) {
+        for (const pid of event.parentIds) {
+          this.childrenCount.set(pid, (this.childrenCount.get(pid) ?? 0) + 1);
+        }
+      }
     } else if (event.type === 'death' && event.cause) {
       this.deathsThisTick++;
       this.totalDeaths++;
@@ -88,8 +126,8 @@ export class Analytics {
 
     // Gene averages
     if (alive.length > 0) {
-      const sum = { speed: 0, aggression: 0, visionRange: 0, attack: 0, defense: 0 };
-      const sumSq = { speed: 0, aggression: 0, visionRange: 0, attack: 0, defense: 0 };
+      const sum = { speed: 0, aggression: 0, visionRange: 0, attack: 0, defense: 0, cooperation: 0 };
+      const sumSq = { speed: 0, aggression: 0, visionRange: 0, attack: 0, defense: 0, cooperation: 0 };
       for (const e of alive) {
         for (const key of Object.keys(sum) as (keyof GeneAverages)[]) {
           const val = e.decoded[key] as number;
@@ -104,7 +142,7 @@ export class Analytics {
         const variance = sumSq[key] / n - (sum[key] / n) ** 2;
         totalVariance += variance;
       }
-      this.geneticDiversity = Math.sqrt(totalVariance / 5);
+      this.geneticDiversity = Math.sqrt(totalVariance / Object.keys(sum).length);
     }
 
     // Generation
@@ -115,6 +153,44 @@ export class Analytics {
     // Food
     this.foodAvailable = foods.filter(f => !f.consumed).length;
     this.foodConsumed = foods.filter(f => f.consumed).length;
+
+    // Hall of Fame: update records for alive entities
+    for (const e of alive) {
+      const children = this.childrenCount.get(e.id) ?? 0;
+      this.entityRecords.set(e.id, {
+        id: e.id,
+        sex: e.sex,
+        generation: e.generation,
+        age: e.age,
+        children,
+        score: e.age + children * 50,
+        dna: e.dna,
+        alive: true,
+      });
+    }
+
+    // Mark dead entities
+    const aliveIds = new Set(alive.map(e => e.id));
+    for (const [id, record] of this.entityRecords) {
+      if (!aliveIds.has(id)) {
+        record.alive = false;
+      }
+    }
+
+    // Extract top 3
+    const allRecords = [...this.entityRecords.values()];
+    allRecords.sort((a, b) => b.score - a.score);
+    this.hallOfFame = allRecords.slice(0, 3);
+
+    // Prune: keep top 50 + all alive
+    if (this.entityRecords.size > 100) {
+      const keepIds = new Set<number>();
+      for (const r of allRecords.slice(0, 50)) keepIds.add(r.id);
+      for (const id of aliveIds) keepIds.add(id);
+      for (const id of this.entityRecords.keys()) {
+        if (!keepIds.has(id)) this.entityRecords.delete(id);
+      }
+    }
 
     // Push to history
     this.history.push({ ...this.currentSnapshot });
@@ -129,6 +205,41 @@ export class Analytics {
 
   getHistory(): TickSnapshot[] {
     return this.history;
+  }
+
+  updateTribes(registry: TribeRegistry, engine?: SimulationEngine): void {
+    this.tribeCount = registry.tribes.size;
+    if (this.tribeCount > 0) {
+      let totalSize = 0;
+      for (const [, tribe] of registry.tribes) {
+        totalSize += tribe.memberIds.size;
+      }
+      this.avgTribeSize = totalSize / this.tribeCount;
+    } else {
+      this.avgTribeSize = 0;
+    }
+
+    // Build tribe ranking
+    if (this.tribeCount > 0) {
+      const entries: TribeRankEntry[] = [];
+      for (const [id, tribe] of registry.tribes) {
+        const kills = engine?.tribeKills.get(id) ?? 0;
+        const foodShared = engine?.tribeFoodShared.get(id) ?? 0;
+        entries.push({
+          id,
+          name: tribe.name,
+          color: tribe.color,
+          members: tribe.memberIds.size,
+          kills,
+          foodShared: Math.round(foodShared),
+          score: tribe.memberIds.size + kills * 10,
+        });
+      }
+      entries.sort((a, b) => b.score - a.score);
+      this.tribeRanking = entries;
+    } else {
+      this.tribeRanking = [];
+    }
   }
 
   getDeathCausePercents(): { starvation: number; age: number; combat: number } {
@@ -146,5 +257,9 @@ export class Analytics {
     this.deathsThisTick = 0;
     this.deathCauses = { starvation: 0, age: 0, combat: 0 };
     this.totalDeaths = 0;
+    this.childrenCount.clear();
+    this.entityRecords.clear();
+    this.hallOfFame = [];
+    this.tribeRanking = [];
   }
 }

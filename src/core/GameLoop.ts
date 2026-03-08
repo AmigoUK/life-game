@@ -19,6 +19,7 @@ export class GameLoop {
     this.currentConfig = engine.config;
     this.renderer = renderer;
     this.renderer.configure(this.engine.grid);
+    this.renderer.setTribeRegistry(this.engine.tribeRegistry);
     this.wireEffects();
   }
 
@@ -72,6 +73,8 @@ export class GameLoop {
     if (this.running) return;
     this.engine.tick();
     this.analytics.update(this.engine.entities, this.engine.foods);
+    this.analytics.updateTribes(this.engine.tribeRegistry, this.engine);
+    this.renderer.getUIOverlay().tribeCount = this.engine.tribeRegistry.tribes.size;
     this.renderer.getEffects().tick();
     this.renderer.advanceFoodTick();
     this.renderer.getUIOverlay().tickBanner();
@@ -83,6 +86,7 @@ export class GameLoop {
     if (config) {
       this.currentConfig = config;
       this.engine = new SimulationEngine(config);
+      this.renderer.setTribeRegistry(this.engine.tribeRegistry);
       this.wireEffects();
     } else {
       this.engine.init();
@@ -108,6 +112,8 @@ export class GameLoop {
     if (now - this.lastTick >= this.tickInterval) {
       this.engine.tick();
       this.analytics.update(this.engine.entities, this.engine.foods);
+      this.analytics.updateTribes(this.engine.tribeRegistry, this.engine);
+      this.renderer.getUIOverlay().tribeCount = this.engine.tribeRegistry.tribes.size;
       this.renderer.getEffects().tick();
       this.renderer.advanceFoodTick();
       this.renderer.getUIOverlay().tickBanner();

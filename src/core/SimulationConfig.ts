@@ -14,6 +14,8 @@ export interface SimulationConfig {
   maxSpeed: number;
   hungerSlowdown: boolean;
   environmentalEvents: boolean;
+  tribesEnabled: boolean;
+  maxTribeSize: number;
   aggressionBias?: [number, number];
 }
 
@@ -33,6 +35,8 @@ export const DEFAULT_CONFIG: SimulationConfig = {
   maxSpeed: 1.0,
   hungerSlowdown: true,
   environmentalEvents: false,
+  tribesEnabled: false,
+  maxTribeSize: 6,
 };
 
 export const SCENARIO_PRESETS: Record<string, Partial<SimulationConfig>> = {
@@ -67,6 +71,11 @@ export const SCENARIO_PRESETS: Record<string, Partial<SimulationConfig>> = {
     foodEnergy: 15,
     reproductionEnergyCost: 60,
     initialEnergy: 40,
+  },
+  'Tribal World': {
+    tribesEnabled: true,
+    initialPopulation: 40,
+    aggressionBias: [0.3, 0.8],
   },
 };
 

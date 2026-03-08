@@ -2,11 +2,11 @@ import { EntityState } from '../core/types';
 import { HexGrid } from '../core/HexGrid';
 
 export class EntityRenderer {
-  draw(ctx: CanvasRenderingContext2D, entity: EntityState, grid: HexGrid, hexSize: number, cx: number, cy: number): void {
+  draw(ctx: CanvasRenderingContext2D, entity: EntityState, grid: HexGrid, hexSize: number, cx: number, cy: number, tribeColor?: string | null): void {
     if (!entity.alive) return;
 
     const { x, y } = grid.hexToPixel(entity.pos, hexSize, cx, cy);
-    const baseSize = hexSize * 0.35 * entity.decoded.size;
+    const baseSize = hexSize * 0.35;
     const energyRatio = Math.max(0.3, entity.energy / 100);
     const size = baseSize * (0.4 + 0.6 * energyRatio);
 
@@ -69,6 +69,19 @@ export class EntityRenderer {
         ctx.lineTo(x + size * 0.5 + spikeLen * 0.5, y + size * 0.25 + spikeLen);
         ctx.stroke();
       }
+    }
+
+    // Tribe indicator dot
+    if (tribeColor) {
+      const dotX = x + size * 0.5;
+      const dotY = entity.sex === 'M' ? y + size * 0.5 : y - size * 0.5;
+      ctx.beginPath();
+      ctx.arc(dotX, dotY, 3, 0, Math.PI * 2);
+      ctx.fillStyle = tribeColor;
+      ctx.fill();
+      ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.8})`;
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
     }
   }
 }

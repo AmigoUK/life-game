@@ -32,7 +32,7 @@ export function decodeDNA(dna: number[]): DecodedDNA {
     fertilityBonus: map(11),
     mutationResist: map(12),
     hue: map(13),
-    size: map(14),
+    cooperation: map(14),
   };
 }
 

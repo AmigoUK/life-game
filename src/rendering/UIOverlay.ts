@@ -3,6 +3,7 @@ import { EntityState } from '../core/types';
 export class UIOverlay {
   private bannerText = '';
   private bannerAlpha = 0;
+  tribeCount = 0;
 
   showBanner(text: string): void {
     this.bannerText = text;
@@ -34,6 +35,9 @@ export class UIOverlay {
     line(`Tick: ${tick}`);
     line(`Population: ${alive.length} (M:${males} F:${females})`);
     line(`Gen: ${maxGen}  Avg Gen: ${avgGen.toFixed(1)}`);
+    if (this.tribeCount > 0) {
+      line(`Tribes: ${this.tribeCount}`);
+    }
 
     this.drawLegend(ctx);
     this.drawBanner(ctx);
@@ -58,7 +62,7 @@ export class UIOverlay {
     const canvasH = ctx.canvas.height;
     const lx = 16;
     const w = 280;
-    const h = 370;
+    const h = 390;
     const ly = canvasH - h - 16;
 
     // Background
@@ -260,18 +264,17 @@ export class UIOverlay {
     textItem('Generation number', lx + 42);
     y += lineH;
 
-    // DNA size gene
-    for (let i = 0; i < 3; i++) {
-      const s = 4 + i * 3;
-      const tx = lx + i * 14;
-      ctx.fillStyle = `rgba(100, 160, 255, 0.7)`;
-      ctx.beginPath();
-      ctx.moveTo(tx + s / 2, y - 8);
-      ctx.lineTo(tx, y - 2);
-      ctx.lineTo(tx + s, y - 2);
-      ctx.closePath();
-      ctx.fill();
-    }
-    textItem('DNA size gene', lx + 48);
+    // ── TRIBES ──
+    sectionHeader('TRIBES');
+
+    // Tribe dot
+    ctx.beginPath();
+    ctx.arc(lx + 6, y - 5, 3, 0, Math.PI * 2);
+    ctx.fillStyle = 'hsl(137.5, 70%, 55%)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+    textItem('Tribe member', lx + 20);
   }
 }

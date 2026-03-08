@@ -1,16 +1,24 @@
 import { EntityState } from '../core/types';
 import { DNA_RANGES } from '../core/constants';
+import { TribeRegistry } from '../core/Tribe';
 
 const DNA_LABELS = [
-  'maxAge', 'speed', 'dirBias', 'vision', 'attack', 'defense', 'maxHP',
-  'aggression', 'foodAff', 'fleeSp', 'energyEff', 'fertility', 'mutResist',
-  'hue', 'size', 'reserved',
+  'Lifespan', 'Speed', 'Direction', 'Vision', 'Attack', 'Defense', 'Health',
+  'Aggression', 'Foraging', 'Flee', 'Efficiency', 'Fertility', 'Stability',
+  'Appearance', 'Cooperation',
+];
+
+const DNA_DESCRIPTIONS = [
+  'Max ticks alive', 'Move probability', 'Go-straight tendency', 'Detection hexes',
+  'Combat damage', 'Damage reduction', 'Max hit points', 'Fight tendency',
+  'Food-seek priority', 'Escape speed bonus', 'Energy drain rate', 'Repro bonus',
+  'Mutation resistance', 'Body hue', 'Tribe affinity',
 ];
 
 const DNA_COLORS = [
   '#8bc34a', '#4fc3f7', '#ffb74d', '#ab47bc', '#ff7043', '#66bb6a', '#ef5350',
   '#e53935', '#81c784', '#29b6f6', '#aed581', '#f48fb1', '#90a4ae',
-  '#ffd54f', '#ce93d8', '#78909c',
+  '#ffd54f', '#78909c',
 ];
 
 export class Inspector {
@@ -35,14 +43,14 @@ export class Inspector {
   isClickInPanel(px: number, py: number): boolean {
     if (!this.selected) return false;
     const { x, y } = this.getPanelPos();
-    return px >= x && px <= x + 220 && py >= y && py <= y + 380;
+    return px >= x && px <= x + 220 && py >= y && py <= y + 520;
   }
 
   private getPanelPos(): { x: number; y: number } {
     return { x: this.panelX + 15, y: this.panelY - 50 };
   }
 
-  draw(ctx: CanvasRenderingContext2D): void {
+  draw(ctx: CanvasRenderingContext2D, tribeRegistry?: TribeRegistry): void {
     const e = this.selected;
     if (!e) return;
 
@@ -54,7 +62,7 @@ export class Inspector {
 
     const { x, y: startY } = this.getPanelPos();
     const w = 220;
-    const h = 380;
+    const h = 520;
 
     // Clamp to canvas
     const cx = Math.min(x, ctx.canvas.width - w - 8);
@@ -108,6 +116,20 @@ export class Inspector {
     ctx.fillStyle = '#888';
     ctx.font = '9px monospace';
     ctx.fillText(`${e.hp.toFixed(0)}/${e.decoded.maxHP}`, lx + 160, yy);
+    yy += 15;
+
+    // Tribe info
+    ctx.font = '11px monospace';
+    ctx.fillStyle = '#ccc';
+    if (e.tribeId !== null && tribeRegistry) {
+      const tribe = tribeRegistry.tribes.get(e.tribeId);
+      const name = tribe?.name ?? `Tribe #${e.tribeId}`;
+      ctx.fillText(name, lx, yy);
+    } else if (e.tribeId !== null) {
+      ctx.fillText(`Tribe #${e.tribeId}`, lx, yy);
+    } else {
+      ctx.fillText('No tribe', lx, yy);
+    }
     yy += 18;
 
     // DNA section
@@ -122,18 +144,25 @@ export class Inspector {
     ctx.fillText('DNA TRAITS', lx, yy + 4);
     yy += 14;
 
-    for (let i = 0; i < e.dna.length && i < 16; i++) {
+    for (let i = 0; i < e.dna.length && i < DNA_LABELS.length; i++) {
       const [min, max] = DNA_RANGES[i];
       const decoded = min + e.dna[i] * (max - min);
       const ratio = e.dna[i];
 
+      // Label + bar + value
       ctx.fillStyle = '#999';
       ctx.font = '9px monospace';
       ctx.fillText(DNA_LABELS[i], lx, yy);
       this.drawBar(ctx, lx + 68, yy - 7, 80, 7, ratio, DNA_COLORS[i]);
       ctx.fillStyle = '#777';
       ctx.fillText(decoded.toFixed(1), lx + 155, yy);
-      yy += 13;
+      yy += 11;
+
+      // Description in muted smaller text
+      ctx.fillStyle = '#555';
+      ctx.font = '8px monospace';
+      ctx.fillText(DNA_DESCRIPTIONS[i], lx + 4, yy);
+      yy += 9;
     }
   }
 

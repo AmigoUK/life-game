@@ -1,4 +1,4 @@
-export const DNA_LENGTH = 16;
+export const DNA_LENGTH = 15;
 
 export const TICK_INTERVAL_MS = 200;
 export const MIN_TICK_MS = 50;
@@ -19,6 +19,5 @@ export const DNA_RANGES: [number, number][] = [
   [0, 0.3],     // 11: fertilityBonus
   [0, 0.5],     // 12: mutationResist
   [0, 360],     // 13: hue (cosmetic)
-  [0.5, 1.5],   // 14: size (cosmetic)
-  [0, 1],       // 15: reserved
+  [0, 1],       // 14: cooperation
 ];

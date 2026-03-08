@@ -5,9 +5,16 @@ import { createFood, consumeFood, tickFood, resetFoodIdCounter } from './Food';
 import { crossover, mutate } from './DNA';
 import { SimulationConfig } from './SimulationConfig';
 import { EnvironmentEvents } from './EnvironmentEvents';
+import { TribeRegistry } from './Tribe';
 
 export type DeathCause = 'starvation' | 'age' | 'combat';
-export type SimEvent = { type: 'death' | 'reproduce' | 'combat'; pos: HexCoord; cause?: DeathCause };
+export type SimEvent = {
+  type: 'death' | 'reproduce' | 'combat';
+  pos: HexCoord;
+  cause?: DeathCause;
+  parentIds?: [number, number];
+  entityId?: number;
+};
 
 export class SimulationEngine {
   grid: HexGrid;
@@ -16,6 +23,9 @@ export class SimulationEngine {
   tickCount = 0;
   config: SimulationConfig;
   envEvents = new EnvironmentEvents();
+  tribeRegistry = new TribeRegistry();
+  tribeKills = new Map<number, number>();
+  tribeFoodShared = new Map<number, number>();
   private eventListeners: ((event: SimEvent) => void)[] = [];
   private bannerCallback: ((text: string) => void) | null = null;
 
@@ -44,6 +54,9 @@ export class SimulationEngine {
     this.foods = [];
     this.tickCount = 0;
     this.envEvents.reset();
+    this.tribeRegistry.reset();
+    this.tribeKills.clear();
+    this.tribeFoodShared.clear();
 
     for (let i = 0; i < this.config.initialPopulation; i++) {
       const sex = i % 2 === 0 ? 'M' as const : 'F' as const;
@@ -69,7 +82,7 @@ export class SimulationEngine {
       if (e.age > e.decoded.maxAge || e.energy <= 0) {
         const cause: DeathCause = e.energy <= 0 ? 'starvation' : 'age';
         e.alive = false;
-        this.emit({ type: 'death', pos: { ...e.pos }, cause });
+        this.emit({ type: 'death', pos: { ...e.pos }, cause, entityId: e.id });
       }
     }
 
@@ -85,7 +98,7 @@ export class SimulationEngine {
       this.moveEntity(e);
     }
 
-    // Phase 3: Food consumption
+    // Phase 3: Food consumption (with tribe sharing)
     const respawnTicks = this.envEvents.isDroughtActive()
       ? cfg.foodRespawnTicks * 2
       : cfg.foodRespawnTicks;
@@ -93,8 +106,34 @@ export class SimulationEngine {
       if (!e.alive) continue;
       for (const food of this.foods) {
         if (!food.consumed && HexGrid.equals(e.pos, food.pos)) {
-          e.energy += consumeFood(food, respawnTicks);
-          e.energy = Math.min(e.energy, cfg.maxEnergy);
+          const gained = consumeFood(food, respawnTicks);
+
+          if (cfg.tribesEnabled && e.tribeId !== null) {
+            const shareRatio = e.decoded.cooperation * 0.3;
+            const kept = gained * (1 - shareRatio);
+            const shared = gained * shareRatio;
+
+            e.energy = Math.min(e.energy + kept, cfg.maxEnergy);
+
+            const tribe = this.tribeRegistry.getTribe(e.id);
+            if (tribe && shared > 0) {
+              const nearbyMates = this.entities.filter(m =>
+                m.alive && m.id !== e.id && tribe.memberIds.has(m.id) &&
+                HexGrid.distance(e.pos, m.pos) <= 2
+              );
+              if (nearbyMates.length > 0) {
+                const perMate = shared / nearbyMates.length;
+                for (const mate of nearbyMates) {
+                  mate.energy = Math.min(mate.energy + perMate, cfg.maxEnergy);
+                }
+                this.tribeFoodShared.set(e.tribeId!, (this.tribeFoodShared.get(e.tribeId!) ?? 0) + shared);
+              } else {
+                e.energy = Math.min(e.energy + shared, cfg.maxEnergy);
+              }
+            }
+          } else {
+            e.energy = Math.min(e.energy + gained, cfg.maxEnergy);
+          }
           break;
         }
       }
@@ -123,12 +162,24 @@ export class SimulationEngine {
       }
     }
 
+    // Phase 4b: Tribe bonding & drift
+    if (cfg.tribesEnabled) {
+      this.tickTribes();
+    }
+
     // Phase 5: Food respawn
     for (const food of this.foods) {
       tickFood(food);
     }
 
     // Phase 6: Cleanup dead
+    if (cfg.tribesEnabled) {
+      for (const e of this.entities) {
+        if (!e.alive && e.tribeId !== null) {
+          this.tribeRegistry.removeMember(e);
+        }
+      }
+    }
     this.entities = this.entities.filter(e => e.alive);
 
     // Phase 7: Environmental events
@@ -192,6 +243,42 @@ export class SimulationEngine {
       }
     }
 
+    // Social cohesion: move toward tribe centroid
+    if (this.config.tribesEnabled && e.tribeId !== null) {
+      const tribe = this.tribeRegistry.getTribe(e.id);
+      if (tribe && tribe.memberIds.size > 1) {
+        let cq = 0, cr = 0, cs = 0, count = 0;
+        for (const mId of tribe.memberIds) {
+          if (mId === e.id) continue;
+          const mate = this.entities.find(en => en.id === mId && en.alive);
+          if (mate) {
+            cq += mate.pos.q; cr += mate.pos.r; cs += mate.pos.s;
+            count++;
+          }
+        }
+        if (count > 0) {
+          const centroid: HexCoord = {
+            q: Math.round(cq / count),
+            r: Math.round(cr / count),
+            s: Math.round(cs / count),
+          };
+          // Fix rounding: q+r+s must equal 0
+          const rq = cq / count, rr = cr / count, rs = cs / count;
+          const dq = Math.abs(centroid.q - rq);
+          const dr = Math.abs(centroid.r - rr);
+          const ds = Math.abs(centroid.s - rs);
+          if (dq > dr && dq > ds) centroid.q = -centroid.r - centroid.s;
+          else if (dr > ds) centroid.r = -centroid.q - centroid.s;
+          else centroid.s = -centroid.q - centroid.r;
+
+          if (HexGrid.distance(e.pos, centroid) > 1 && Math.random() < e.decoded.cooperation * 0.4) {
+            e.pos = this.grid.stepToward(e.pos, centroid);
+            return;
+          }
+        }
+      }
+    }
+
     if (Math.random() > e.decoded.directionBias) {
       e.pos = this.grid.randomNeighborOrStay(e.pos);
     }
@@ -223,7 +310,7 @@ export class SimulationEngine {
     );
 
     this.entities.push(child);
-    this.emit({ type: 'reproduce', pos: { ...a.pos } });
+    this.emit({ type: 'reproduce', pos: { ...a.pos }, parentIds: [a.id, b.id] });
   }
 
   private handleSameSexEncounter(a: EntityState, b: EntityState): void {
@@ -233,10 +320,21 @@ export class SimulationEngine {
     if (!aFights && !bFights) return;
 
     if (aFights && !bFights) {
+      if (this.config.tribesEnabled && this.hasTribalDefense(b)) {
+        // Stand ground — escalate to combat
+        this.emit({ type: 'combat', pos: { ...a.pos } });
+        this.resolveCombat(a, b);
+        return;
+      }
       b.pos = this.grid.stepAwayFrom(b.pos, a.pos);
       return;
     }
     if (!aFights && bFights) {
+      if (this.config.tribesEnabled && this.hasTribalDefense(a)) {
+        this.emit({ type: 'combat', pos: { ...a.pos } });
+        this.resolveCombat(a, b);
+        return;
+      }
       a.pos = this.grid.stepAwayFrom(a.pos, b.pos);
       return;
     }
@@ -246,18 +344,125 @@ export class SimulationEngine {
   }
 
   private resolveCombat(a: EntityState, b: EntityState): void {
-    const aDmg = a.decoded.attack * Math.random();
+    let aAttack = a.decoded.attack;
+    let bAttack = b.decoded.attack;
+
+    if (this.config.tribesEnabled) {
+      aAttack += this.getAllyBonus(a);
+      bAttack += this.getAllyBonus(b);
+    }
+
+    const aDmg = aAttack * Math.random();
     const bDef = b.decoded.defense * Math.random();
     const aNet = Math.max(0, aDmg - bDef);
 
-    const bDmg = b.decoded.attack * Math.random();
+    const bDmg = bAttack * Math.random();
     const aDef = a.decoded.defense * Math.random();
     const bNet = Math.max(0, bDmg - aDef);
 
     b.hp -= aNet;
     a.hp -= bNet;
 
-    if (a.hp <= 0) { a.alive = false; this.emit({ type: 'death', pos: { ...a.pos }, cause: 'combat' }); }
-    if (b.hp <= 0) { b.alive = false; this.emit({ type: 'death', pos: { ...b.pos }, cause: 'combat' }); }
+    if (a.hp <= 0) {
+      a.alive = false;
+      this.emit({ type: 'death', pos: { ...a.pos }, cause: 'combat', entityId: a.id });
+      if (b.tribeId !== null) {
+        this.tribeKills.set(b.tribeId, (this.tribeKills.get(b.tribeId) ?? 0) + 1);
+      }
+    }
+    if (b.hp <= 0) {
+      b.alive = false;
+      this.emit({ type: 'death', pos: { ...b.pos }, cause: 'combat', entityId: b.id });
+      if (a.tribeId !== null) {
+        this.tribeKills.set(a.tribeId, (this.tribeKills.get(a.tribeId) ?? 0) + 1);
+      }
+    }
+  }
+
+  private tickTribes(): void {
+    const alive = this.entities.filter(e => e.alive);
+    const maxSize = this.config.maxTribeSize;
+
+    // Tribe bonding
+    for (const e of alive) {
+      if (e.tribeId !== null) continue;
+      if (e.decoded.cooperation <= 0.4) continue;
+
+      const neighbors = alive.filter(n =>
+        n.id !== e.id && n.decoded.cooperation > 0.4 &&
+        HexGrid.distance(e.pos, n.pos) <= 1
+      );
+
+      for (const n of neighbors) {
+        if (n.tribeId !== null) {
+          const tribe = this.tribeRegistry.tribes.get(n.tribeId);
+          if (tribe && tribe.memberIds.size < maxSize) {
+            this.tribeRegistry.joinTribe(e, n.tribeId);
+            break;
+          }
+        } else {
+          this.tribeRegistry.formTribe(e, n);
+          break;
+        }
+      }
+    }
+
+    // Tribe drift: dissolve if all members > 3 hexes from every other
+    for (const [, tribe] of this.tribeRegistry.tribes) {
+      const members = [...tribe.memberIds]
+        .map(id => alive.find(e => e.id === id))
+        .filter((e): e is EntityState => e !== undefined);
+
+      if (members.length < 2) continue;
+
+      let allFar = true;
+      outer: for (let i = 0; i < members.length; i++) {
+        for (let j = i + 1; j < members.length; j++) {
+          if (HexGrid.distance(members[i].pos, members[j].pos) <= 3) {
+            allFar = false;
+            break outer;
+          }
+        }
+      }
+      if (allFar) {
+        for (const m of members) {
+          this.tribeRegistry.removeMember(m);
+        }
+      }
+    }
+
+    // Voluntary leave: low cooperation entities may leave
+    for (const e of alive) {
+      if (e.tribeId === null) continue;
+      if (e.decoded.cooperation < 0.25 && Math.random() < 0.05) {
+        this.tribeRegistry.removeMember(e);
+      }
+    }
+  }
+
+  private hasTribalDefense(e: EntityState): boolean {
+    if (e.tribeId === null) return false;
+    const tribe = this.tribeRegistry.getTribe(e.id);
+    if (!tribe) return false;
+    const nearbyMates = this.entities.filter(m =>
+      m.alive && m.id !== e.id && tribe.memberIds.has(m.id) &&
+      HexGrid.distance(e.pos, m.pos) <= e.decoded.visionRange
+    );
+    return nearbyMates.length >= 2;
+  }
+
+  private getAllyBonus(e: EntityState): number {
+    if (e.tribeId === null) return 0;
+    const tribe = this.tribeRegistry.getTribe(e.id);
+    if (!tribe) return 0;
+    let bonus = 0;
+    for (const mId of tribe.memberIds) {
+      if (mId === e.id) continue;
+      const ally = this.entities.find(en => en.id === mId && en.alive);
+      if (ally && HexGrid.distance(e.pos, ally.pos) <= ally.decoded.visionRange) {
+        bonus += ally.decoded.attack * 0.3 * ally.decoded.cooperation;
+      }
+    }
+    return bonus;
   }
 }
