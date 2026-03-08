@@ -1,11 +1,11 @@
-export const DNA_LENGTH = 15;
+export const DNA_LENGTH = 16;
 
 export const TICK_INTERVAL_MS = 200;
 export const MIN_TICK_MS = 50;
 export const MAX_TICK_MS = 1000;
 
 export const DNA_RANGES: [number, number][] = [
-  [60, 300],    // 0: maxAge
+  [40, 78],     // 0: maxAge
   [0.2, 1.0],   // 1: speed
   [0, 1],       // 2: directionBias
   [1, 4],       // 3: visionRange
@@ -20,4 +20,5 @@ export const DNA_RANGES: [number, number][] = [
   [0, 0.5],     // 12: mutationResist
   [0, 360],     // 13: hue (cosmetic)
   [0, 1],       // 14: cooperation
+  [0, 100],     // 15: storageCapacity
 ];

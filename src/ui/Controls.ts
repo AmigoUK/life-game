@@ -5,6 +5,14 @@ import { SimulationConfig, SCENARIO_PRESETS, buildConfig } from '../core/Simulat
 import { decodeDNA } from '../core/DNA';
 import { Renderer } from '../rendering/Renderer';
 import { HeatmapMode } from '../rendering/HeatmapRenderer';
+import { Season } from '../core/Seasons';
+
+const SEASON_BG_COLORS: Record<Season, string> = {
+  spring: 'rgba(102,187,106,0.1)',
+  summer: 'rgba(255,213,79,0.1)',
+  autumn: 'rgba(255,138,101,0.1)',
+  winter: 'rgba(144,202,249,0.15)',
+};
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs?: Record<string, string>, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -68,6 +76,10 @@ export class Controls {
   private tribeSizeValue!: HTMLSpanElement;
   private hallOfFameEl!: HTMLDivElement;
   private tribeRankingEl!: HTMLDivElement;
+  private seasonalStatsEl!: HTMLDivElement;
+  private seasonsToggle!: HTMLInputElement;
+  private seasonLengthSlider!: HTMLInputElement;
+  private seasonLengthValue!: HTMLSpanElement;
   private pendingConfig: SimulationConfig;
 
   constructor(container: HTMLElement, gameLoop: GameLoop, renderer: Renderer) {
@@ -164,7 +176,12 @@ export class Controls {
     const tribesLabel = el('label', { style: 'display:flex;align-items:center;gap:4px;font-size:10px;color:#aaa;cursor:pointer;' });
     tribesLabel.append(this.tribesToggle, document.createTextNode('Tribes'));
 
-    togglesRow.append(hungerLabel, eventsLabel, tribesLabel);
+    this.seasonsToggle = el('input', { type: 'checkbox' }) as HTMLInputElement;
+    this.seasonsToggle.checked = this.pendingConfig.seasonsEnabled;
+    const seasonsLabel = el('label', { style: 'display:flex;align-items:center;gap:4px;font-size:10px;color:#aaa;cursor:pointer;' });
+    seasonsLabel.append(this.seasonsToggle, document.createTextNode('Seasons'));
+
+    togglesRow.append(hungerLabel, eventsLabel, tribesLabel, seasonsLabel);
     configSection.body.appendChild(togglesRow);
 
     // Max tribe size slider
@@ -178,6 +195,18 @@ export class Controls {
     this.tribeSizeValue = el('span', { style: 'width:36px;font-size:10px;text-align:right;color:#888;flex-shrink:0;' }, String(this.pendingConfig.maxTribeSize));
     tribeSizeRow.append(tribeSizeLabel, this.tribeSizeSlider, this.tribeSizeValue);
     configSection.body.appendChild(tribeSizeRow);
+
+    // Season length slider
+    const seasonLengthRow = el('div', { style: 'display:flex;align-items:center;gap:4px;margin-bottom:3px;' });
+    const seasonLengthLabel = el('span', { style: 'width:75px;font-size:10px;color:#aaa;flex-shrink:0;' }, 'Season Len');
+    this.seasonLengthSlider = el('input', {
+      type: 'range', min: '20', max: '100', step: '10',
+      value: String(this.pendingConfig.seasonLength),
+      style: 'flex:1;height:14px;',
+    });
+    this.seasonLengthValue = el('span', { style: 'width:36px;font-size:10px;text-align:right;color:#888;flex-shrink:0;' }, String(this.pendingConfig.seasonLength));
+    seasonLengthRow.append(seasonLengthLabel, this.seasonLengthSlider, this.seasonLengthValue);
+    configSection.body.appendChild(seasonLengthRow);
 
     this.hungerToggle.addEventListener('change', () => {
       this.pendingConfig.hungerSlowdown = this.hungerToggle.checked;
@@ -195,6 +224,16 @@ export class Controls {
       const v = parseInt(this.tribeSizeSlider.value);
       this.pendingConfig.maxTribeSize = v;
       this.tribeSizeValue.textContent = String(v);
+      this.scenarioSelect.value = '__custom__';
+    });
+    this.seasonsToggle.addEventListener('change', () => {
+      this.pendingConfig.seasonsEnabled = this.seasonsToggle.checked;
+      this.scenarioSelect.value = '__custom__';
+    });
+    this.seasonLengthSlider.addEventListener('input', () => {
+      const v = parseInt(this.seasonLengthSlider.value);
+      this.pendingConfig.seasonLength = v;
+      this.seasonLengthValue.textContent = String(v);
       this.scenarioSelect.value = '__custom__';
     });
 
@@ -239,6 +278,10 @@ export class Controls {
     const tribeRankSection = createCollapsible('Tribe Ranking', false);
     this.tribeRankingEl = tribeRankSection.body;
 
+    // Seasonal Stats section
+    const seasonalSection = createCollapsible('Seasonal Stats', false);
+    this.seasonalStatsEl = seasonalSection.body;
+
     // Heatmap section
     const heatmapSection = createCollapsible('Heatmap', false);
     const heatmapRow = el('div', { style: 'display:flex;align-items:center;gap:8px;' });
@@ -264,7 +307,7 @@ export class Controls {
     wrapper.append(
       btnRow, speedGroup, configSection.wrapper, popSection.wrapper,
       geneSection.wrapper, chartSection.wrapper, hofSection.wrapper,
-      tribeRankSection.wrapper, heatmapSection.wrapper,
+      tribeRankSection.wrapper, seasonalSection.wrapper, heatmapSection.wrapper,
     );
     this.container.appendChild(wrapper);
 
@@ -298,6 +341,8 @@ export class Controls {
       this.pendingConfig.environmentalEvents = this.eventsToggle.checked;
       this.pendingConfig.tribesEnabled = this.tribesToggle.checked;
       this.pendingConfig.maxTribeSize = parseInt(this.tribeSizeSlider.value);
+      this.pendingConfig.seasonsEnabled = this.seasonsToggle.checked;
+      this.pendingConfig.seasonLength = parseInt(this.seasonLengthSlider.value);
       this.gameLoop.reset(buildConfig(this.pendingConfig));
       this.syncToggleButton();
     });
@@ -324,6 +369,9 @@ export class Controls {
     this.tribesToggle.checked = this.pendingConfig.tribesEnabled;
     this.tribeSizeSlider.value = String(this.pendingConfig.maxTribeSize);
     this.tribeSizeValue.textContent = String(this.pendingConfig.maxTribeSize);
+    this.seasonsToggle.checked = this.pendingConfig.seasonsEnabled;
+    this.seasonLengthSlider.value = String(this.pendingConfig.seasonLength);
+    this.seasonLengthValue.textContent = String(this.pendingConfig.seasonLength);
   }
 
   private toggleSim(): void {
@@ -363,6 +411,7 @@ export class Controls {
     this.drawSparkline(analytics.getHistory());
     this.updateHallOfFame(analytics);
     this.updateTribeRanking(analytics);
+    this.updateSeasonalStats(analytics);
   }
 
   private updateGenePool(analytics: Analytics): void {
@@ -414,6 +463,16 @@ export class Controls {
     ctx.fillText(String(maxPop), drawX - 3, 10);
     ctx.fillText('0', drawX - 3, h - 2);
     ctx.textAlign = 'left';
+
+    // Season background bands
+    for (let i = 0; i < history.length; i++) {
+      const s = history[i].season;
+      if (s) {
+        const px = drawX + i * step;
+        ctx.fillStyle = SEASON_BG_COLORS[s];
+        ctx.fillRect(px, 0, Math.max(step, 1), h);
+      }
+    }
 
     const drawLine = (getValue: (s: TickSnapshot) => number, color: string) => {
       ctx.strokeStyle = color;
@@ -487,6 +546,22 @@ export class Controls {
       row.append(dot, name, detail, score);
       this.tribeRankingEl.appendChild(row);
     }
+  }
+
+  private updateSeasonalStats(analytics: Analytics): void {
+    this.seasonalStatsEl.textContent = '';
+    const b = analytics.birthsBySeason;
+    const s = analytics.starvationsBySeason;
+    const lines = [
+      `Winter survival: ${analytics.winterSurvivalRate}%`,
+      `Births: Spr:${b.spring} | Sum:${b.summer} | Aut:${b.autumn} | Win:${b.winter}`,
+      `Starvation: Spr:${s.spring} | Sum:${s.summer} | Aut:${s.autumn} | Win:${s.winter}`,
+      `Avg food storage: ${analytics.avgFoodStorage.toFixed(1)}`,
+    ];
+    lines.forEach((text, i) => {
+      if (i > 0) this.seasonalStatsEl.appendChild(document.createElement('br'));
+      this.seasonalStatsEl.appendChild(document.createTextNode(text));
+    });
   }
 
   private setupKeyboard(): void {

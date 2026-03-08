@@ -5,20 +5,20 @@ import { TribeRegistry } from '../core/Tribe';
 const DNA_LABELS = [
   'Lifespan', 'Speed', 'Direction', 'Vision', 'Attack', 'Defense', 'Health',
   'Aggression', 'Foraging', 'Flee', 'Efficiency', 'Fertility', 'Stability',
-  'Appearance', 'Cooperation',
+  'Appearance', 'Cooperation', 'Storage',
 ];
 
 const DNA_DESCRIPTIONS = [
   'Max ticks alive', 'Move probability', 'Go-straight tendency', 'Detection hexes',
   'Combat damage', 'Damage reduction', 'Max hit points', 'Fight tendency',
   'Food-seek priority', 'Escape speed bonus', 'Energy drain rate', 'Repro bonus',
-  'Mutation resistance', 'Body hue', 'Tribe affinity',
+  'Mutation resistance', 'Body hue', 'Tribe affinity', 'Winter food reserve',
 ];
 
 const DNA_COLORS = [
   '#8bc34a', '#4fc3f7', '#ffb74d', '#ab47bc', '#ff7043', '#66bb6a', '#ef5350',
   '#e53935', '#81c784', '#29b6f6', '#aed581', '#f48fb1', '#90a4ae',
-  '#ffd54f', '#78909c',
+  '#ffd54f', '#78909c', '#ffab40',
 ];
 
 export class Inspector {

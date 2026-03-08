@@ -22,6 +22,7 @@ export interface DecodedDNA {
   mutationResist: number;
   hue: number;
   cooperation: number;
+  storageCapacity: number;
 }
 
 export interface EntityState {
@@ -36,6 +37,8 @@ export interface EntityState {
   generation: number;
   alive: boolean;
   tribeId: number | null;
+  foodStorage: number;
+  lastBirthSeason: number;
 }
 
 export interface FoodState {

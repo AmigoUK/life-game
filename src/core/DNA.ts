@@ -33,6 +33,7 @@ export function decodeDNA(dna: number[]): DecodedDNA {
     mutationResist: map(12),
     hue: map(13),
     cooperation: map(14),
+    storageCapacity: Math.round(map(15)),
   };
 }
 

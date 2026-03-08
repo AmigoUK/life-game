@@ -3,6 +3,7 @@ import { Analytics } from './Analytics';
 import { Renderer } from '../rendering/Renderer';
 import { SimulationConfig } from './SimulationConfig';
 import { TICK_INTERVAL_MS } from './constants';
+import { Season } from './Seasons';
 
 export class GameLoop {
   private engine: SimulationEngine;
@@ -13,6 +14,7 @@ export class GameLoop {
   private rafId = 0;
   private analytics = new Analytics();
   private currentConfig: SimulationConfig;
+  private prevSeason: Season | undefined;
 
   constructor(engine: SimulationEngine, renderer: Renderer) {
     this.engine = engine;
@@ -29,7 +31,8 @@ export class GameLoop {
       if (event.type === 'death') effects.addDeath(event.pos);
       else if (event.type === 'reproduce') effects.addReproduction(event.pos);
       else if (event.type === 'combat') effects.addCombat(event.pos);
-      this.analytics.handleEvent(event);
+      const season = this.engine.seasonManager?.getState().current;
+      this.analytics.handleEvent(event, season);
     });
     this.engine.onBanner((text) => {
       this.renderer.getUIOverlay().showBanner(text);
@@ -72,13 +75,31 @@ export class GameLoop {
   stepOnce(): void {
     if (this.running) return;
     this.engine.tick();
+    this.postTick();
+    this.render();
+  }
+
+  private postTick(): void {
+    // Season tracking
+    if (this.engine.seasonManager) {
+      const sm = this.engine.seasonManager;
+      const state = sm.getState();
+      this.analytics.setSeason(state.current);
+      this.renderer.getUIOverlay().seasonLabel = sm.getLabel();
+      this.renderer.getUIOverlay().seasonColor = sm.getColor();
+      if (this.prevSeason && this.prevSeason !== state.current) {
+        const aliveCount = this.engine.entities.filter(e => e.alive).length;
+        this.analytics.onSeasonChange(this.prevSeason, state.current, aliveCount);
+      }
+      this.prevSeason = state.current;
+    }
+
     this.analytics.update(this.engine.entities, this.engine.foods);
     this.analytics.updateTribes(this.engine.tribeRegistry, this.engine);
     this.renderer.getUIOverlay().tribeCount = this.engine.tribeRegistry.tribes.size;
     this.renderer.getEffects().tick();
     this.renderer.advanceFoodTick();
     this.renderer.getUIOverlay().tickBanner();
-    this.render();
   }
 
   reset(config?: SimulationConfig): void {
@@ -111,12 +132,7 @@ export class GameLoop {
 
     if (now - this.lastTick >= this.tickInterval) {
       this.engine.tick();
-      this.analytics.update(this.engine.entities, this.engine.foods);
-      this.analytics.updateTribes(this.engine.tribeRegistry, this.engine);
-      this.renderer.getUIOverlay().tribeCount = this.engine.tribeRegistry.tribes.size;
-      this.renderer.getEffects().tick();
-      this.renderer.advanceFoodTick();
-      this.renderer.getUIOverlay().tickBanner();
+      this.postTick();
       this.lastTick = now;
     }
 

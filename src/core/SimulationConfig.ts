@@ -16,6 +16,8 @@ export interface SimulationConfig {
   environmentalEvents: boolean;
   tribesEnabled: boolean;
   maxTribeSize: number;
+  seasonsEnabled: boolean;
+  seasonLength: number;
   aggressionBias?: [number, number];
 }
 
@@ -37,6 +39,8 @@ export const DEFAULT_CONFIG: SimulationConfig = {
   environmentalEvents: false,
   tribesEnabled: false,
   maxTribeSize: 6,
+  seasonsEnabled: true,
+  seasonLength: 50,
 };
 
 export const SCENARIO_PRESETS: Record<string, Partial<SimulationConfig>> = {
@@ -76,6 +80,13 @@ export const SCENARIO_PRESETS: Record<string, Partial<SimulationConfig>> = {
     tribesEnabled: true,
     initialPopulation: 40,
     aggressionBias: [0.3, 0.8],
+  },
+  'Seasonal World': {
+    seasonsEnabled: true,
+    seasonLength: 50,
+    tribesEnabled: true,
+    initialPopulation: 40,
+    initialFoodCount: 50,
   },
 };
 

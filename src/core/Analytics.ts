@@ -1,6 +1,7 @@
 import { EntityState, Sex } from './types';
 import { SimEvent, SimulationEngine } from './SimulationEngine';
 import { TribeRegistry } from './Tribe';
+import { Season } from './Seasons';
 
 export interface TickSnapshot {
   total: number;
@@ -9,6 +10,7 @@ export interface TickSnapshot {
   births: number;
   deaths: number;
   avgEnergy: number;
+  season?: Season;
 }
 
 export interface DeathStats {
@@ -80,7 +82,15 @@ export class Analytics {
   // Tribe ranking
   tribeRanking: TribeRankEntry[] = [];
 
-  handleEvent(event: SimEvent): void {
+  // Seasonal stats
+  birthsBySeason: Record<Season, number> = { spring: 0, summer: 0, autumn: 0, winter: 0 };
+  starvationsBySeason: Record<Season, number> = { spring: 0, summer: 0, autumn: 0, winter: 0 };
+  winterStartPop = 0;
+  winterSurvivalRate = 0;
+  avgFoodStorage = 0;
+  private currentSeason: Season | undefined;
+
+  handleEvent(event: SimEvent, season?: Season): void {
     if (event.type === 'reproduce') {
       this.birthsThisTick++;
       if (event.parentIds) {
@@ -88,11 +98,27 @@ export class Analytics {
           this.childrenCount.set(pid, (this.childrenCount.get(pid) ?? 0) + 1);
         }
       }
+      if (season) this.birthsBySeason[season]++;
     } else if (event.type === 'death' && event.cause) {
       this.deathsThisTick++;
       this.totalDeaths++;
       this.deathCauses[event.cause]++;
+      if (season && event.cause === 'starvation') {
+        this.starvationsBySeason[season]++;
+      }
     }
+  }
+
+  onSeasonChange(from: Season, to: Season, aliveCount: number): void {
+    if (to === 'winter') {
+      this.winterStartPop = aliveCount;
+    } else if (from === 'winter' && this.winterStartPop > 0) {
+      this.winterSurvivalRate = Math.round((aliveCount / this.winterStartPop) * 100);
+    }
+  }
+
+  setSeason(season: Season | undefined): void {
+    this.currentSeason = season;
   }
 
   update(entities: EntityState[], foods: { consumed: boolean }[]): void {
@@ -154,6 +180,11 @@ export class Analytics {
     this.foodAvailable = foods.filter(f => !f.consumed).length;
     this.foodConsumed = foods.filter(f => f.consumed).length;
 
+    // Food storage
+    this.avgFoodStorage = alive.length > 0
+      ? alive.reduce((s, e) => s + e.foodStorage, 0) / alive.length
+      : 0;
+
     // Hall of Fame: update records for alive entities
     for (const e of alive) {
       const children = this.childrenCount.get(e.id) ?? 0;
@@ -192,7 +223,8 @@ export class Analytics {
       }
     }
 
-    // Push to history
+    // Push to history (include season)
+    this.currentSnapshot.season = this.currentSeason;
     this.history.push({ ...this.currentSnapshot });
     if (this.history.length > this.maxHistory) {
       this.history.shift();
@@ -261,5 +293,11 @@ export class Analytics {
     this.entityRecords.clear();
     this.hallOfFame = [];
     this.tribeRanking = [];
+    this.birthsBySeason = { spring: 0, summer: 0, autumn: 0, winter: 0 };
+    this.starvationsBySeason = { spring: 0, summer: 0, autumn: 0, winter: 0 };
+    this.winterStartPop = 0;
+    this.winterSurvivalRate = 0;
+    this.avgFoodStorage = 0;
+    this.currentSeason = undefined;
   }
 }

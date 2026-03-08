@@ -4,6 +4,8 @@ export class UIOverlay {
   private bannerText = '';
   private bannerAlpha = 0;
   tribeCount = 0;
+  seasonLabel?: string;
+  seasonColor?: string;
 
   showBanner(text: string): void {
     this.bannerText = text;
@@ -37,6 +39,11 @@ export class UIOverlay {
     line(`Gen: ${maxGen}  Avg Gen: ${avgGen.toFixed(1)}`);
     if (this.tribeCount > 0) {
       line(`Tribes: ${this.tribeCount}`);
+    }
+    if (this.seasonLabel) {
+      ctx.fillStyle = this.seasonColor ?? 'rgba(255, 255, 255, 0.85)';
+      line(this.seasonLabel);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
     }
 
     this.drawLegend(ctx);

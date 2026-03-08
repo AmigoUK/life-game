@@ -6,6 +6,7 @@ import { crossover, mutate } from './DNA';
 import { SimulationConfig } from './SimulationConfig';
 import { EnvironmentEvents } from './EnvironmentEvents';
 import { TribeRegistry } from './Tribe';
+import { SeasonManager } from './Seasons';
 
 export type DeathCause = 'starvation' | 'age' | 'combat';
 export type SimEvent = {
@@ -26,6 +27,7 @@ export class SimulationEngine {
   tribeRegistry = new TribeRegistry();
   tribeKills = new Map<number, number>();
   tribeFoodShared = new Map<number, number>();
+  seasonManager: SeasonManager | null = null;
   private eventListeners: ((event: SimEvent) => void)[] = [];
   private bannerCallback: ((text: string) => void) | null = null;
 
@@ -44,6 +46,9 @@ export class SimulationEngine {
   constructor(config: SimulationConfig) {
     this.config = config;
     this.grid = new HexGrid(config.gridRadius);
+    if (config.seasonsEnabled) {
+      this.seasonManager = new SeasonManager(config.seasonLength);
+    }
     this.init();
   }
 
@@ -55,6 +60,7 @@ export class SimulationEngine {
     this.tickCount = 0;
     this.envEvents.reset();
     this.tribeRegistry.reset();
+    this.seasonManager?.reset();
     this.tribeKills.clear();
     this.tribeFoodShared.clear();
 
@@ -74,11 +80,32 @@ export class SimulationEngine {
     this.tickCount++;
     const cfg = this.config;
 
+    // Season tick
+    if (this.config.seasonsEnabled && this.seasonManager) {
+      const { changed, state } = this.seasonManager.tick();
+      if (changed) {
+        this.bannerCallback?.(`${state.current} — Year ${state.year}`);
+        if (state.current === 'spring') {
+          for (let i = 0; i < 10; i++) {
+            this.foods.push(createFood(this.grid.randomCell(), cfg.foodEnergy));
+          }
+        }
+      }
+    }
+
     // Phase 1: Aging and energy drain
     for (const e of this.entities) {
       if (!e.alive) continue;
       e.age++;
       e.energy -= cfg.energyPerTick * e.decoded.energyEfficiency;
+      if (e.energy <= 0 && e.foodStorage > 0) {
+        const deficit = -e.energy;
+        // Metabolic cost: efficient entities recover more from storage
+        const conversionRate = 0.5 + 0.5 * e.decoded.energyEfficiency;
+        const storageNeeded = Math.min(deficit / conversionRate, e.foodStorage);
+        e.foodStorage -= storageNeeded;
+        e.energy += storageNeeded * conversionRate;
+      }
       if (e.age > e.decoded.maxAge || e.energy <= 0) {
         const cause: DeathCause = e.energy <= 0 ? 'starvation' : 'age';
         e.alive = false;
@@ -113,7 +140,14 @@ export class SimulationEngine {
             const kept = gained * (1 - shareRatio);
             const shared = gained * shareRatio;
 
-            e.energy = Math.min(e.energy + kept, cfg.maxEnergy);
+            const newKeptEnergy = e.energy + kept;
+            if (newKeptEnergy > cfg.maxEnergy) {
+              e.energy = cfg.maxEnergy;
+              const overflow = newKeptEnergy - cfg.maxEnergy;
+              e.foodStorage = Math.min(e.foodStorage + overflow, e.decoded.storageCapacity);
+            } else {
+              e.energy = newKeptEnergy;
+            }
 
             const tribe = this.tribeRegistry.getTribe(e.id);
             if (tribe && shared > 0) {
@@ -124,15 +158,36 @@ export class SimulationEngine {
               if (nearbyMates.length > 0) {
                 const perMate = shared / nearbyMates.length;
                 for (const mate of nearbyMates) {
-                  mate.energy = Math.min(mate.energy + perMate, cfg.maxEnergy);
+                  const newMateEnergy = mate.energy + perMate;
+                  if (newMateEnergy > cfg.maxEnergy) {
+                    mate.energy = cfg.maxEnergy;
+                    const overflow = newMateEnergy - cfg.maxEnergy;
+                    mate.foodStorage = Math.min(mate.foodStorage + overflow, mate.decoded.storageCapacity);
+                  } else {
+                    mate.energy = newMateEnergy;
+                  }
                 }
                 this.tribeFoodShared.set(e.tribeId!, (this.tribeFoodShared.get(e.tribeId!) ?? 0) + shared);
               } else {
-                e.energy = Math.min(e.energy + shared, cfg.maxEnergy);
+                const newSharedEnergy = e.energy + shared;
+                if (newSharedEnergy > cfg.maxEnergy) {
+                  e.energy = cfg.maxEnergy;
+                  const overflow = newSharedEnergy - cfg.maxEnergy;
+                  e.foodStorage = Math.min(e.foodStorage + overflow, e.decoded.storageCapacity);
+                } else {
+                  e.energy = newSharedEnergy;
+                }
               }
             }
           } else {
-            e.energy = Math.min(e.energy + gained, cfg.maxEnergy);
+            const newEnergy = e.energy + gained;
+            if (newEnergy > cfg.maxEnergy) {
+              e.energy = cfg.maxEnergy;
+              const overflow = newEnergy - cfg.maxEnergy;
+              e.foodStorage = Math.min(e.foodStorage + overflow, e.decoded.storageCapacity);
+            } else {
+              e.energy = newEnergy;
+            }
           }
           break;
         }
@@ -167,9 +222,12 @@ export class SimulationEngine {
       this.tickTribes();
     }
 
-    // Phase 5: Food respawn
-    for (const food of this.foods) {
-      tickFood(food);
+    // Phase 5: Food respawn (frozen during winter)
+    const isWinter = this.config.seasonsEnabled && this.seasonManager?.isWinter();
+    if (!isWinter) {
+      for (const food of this.foods) {
+        tickFood(food);
+      }
     }
 
     // Phase 6: Cleanup dead
@@ -286,6 +344,14 @@ export class SimulationEngine {
 
   private tryReproduce(a: EntityState, b: EntityState): void {
     const cfg = this.config;
+
+    // Female can only give birth once per season
+    if (this.config.seasonsEnabled && this.seasonManager) {
+      const female = a.sex === 'F' ? a : b;
+      const currentSeason = this.seasonManager.getState().totalSeasonsPassed;
+      if (female.lastBirthSeason === currentSeason) return;
+    }
+
     const costA = cfg.reproductionEnergyCost * (1 - a.decoded.fertilityBonus);
     const costB = cfg.reproductionEnergyCost * (1 - b.decoded.fertilityBonus);
 
@@ -311,6 +377,11 @@ export class SimulationEngine {
 
     this.entities.push(child);
     this.emit({ type: 'reproduce', pos: { ...a.pos }, parentIds: [a.id, b.id] });
+
+    if (this.config.seasonsEnabled && this.seasonManager) {
+      const female = a.sex === 'F' ? a : b;
+      female.lastBirthSeason = this.seasonManager.getState().totalSeasonsPassed;
+    }
   }
 
   private handleSameSexEncounter(a: EntityState, b: EntityState): void {

@@ -26,6 +26,8 @@ export function createEntity(
     generation,
     alive: true,
     tribeId: null,
+    foodStorage: 0,
+    lastBirthSeason: -1,
   };
 }
 

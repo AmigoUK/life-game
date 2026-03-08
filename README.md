@@ -9,7 +9,7 @@ Entities with DNA-encoded traits live on a hex grid, seeking food, reproducing, 
 ## Features
 
 - **Hexagonal grid** with configurable radius (8-24)
-- **Genetic system** — 15-gene DNA encoding traits: speed, aggression, vision, attack, defense, energy efficiency, cooperation, color hue, and more
+- **Genetic system** — 16-gene DNA encoding traits: speed, aggression, vision, attack, defense, energy efficiency, cooperation, food storage capacity, color hue, and more
 - **Reproduction** — crossover + mutation with heritable mutation resistance
 - **Combat** — aggressive same-sex encounters with attack/defense rolls
 - **Food ecosystem** — consumable food with respawn timers and pulsating visuals
@@ -20,14 +20,20 @@ Entities with DNA-encoded traits live on a hex grid, seeking food, reproducing, 
   - Opacity reflects age
   - DNA hue creates visible genetic family lineages
   - Tribe membership shown with colored dots
+- **Seasons** — cyclical spring/summer/autumn/winter system with configurable season length:
+  - Spring spawns bonus food; winter freezes food respawn timers
+  - Females limited to one birth per season
+  - Entities store surplus food (evolvable storage capacity gene) and consume reserves in winter with metabolic efficiency cost
+  - Season-colored HUD indicator and sparkline background bands
 - **Tribes & cooperation** — cooperative entities form tribes with football team names (Real Madrid, Barcelona, Liverpool, etc.), share food, and defend each other in combat
 - **Canvas legend** — bottom-left overlay explaining all visual elements
 - **Analytics panel** with collapsible sections:
   - Population breakdown (M/F, births/deaths per tick, death causes)
   - Gene pool bars showing average trait values with genetic diversity index
-  - Real-time sparkline chart with Y-axis scale labels and colored legend
+  - Real-time sparkline chart with Y-axis scale labels, colored legend, and season background bands
   - Hall of Fame — top 3 most successful entities ranked by age + offspring score
   - Tribe Ranking — tribes sorted by score with kill/food-sharing stats
+  - Seasonal Stats — winter survival rate, births/starvation by season, average food storage
 - **Entity inspector** — click any entity to see detailed stats with descriptive gene labels and one-line explanations
 - **Animated effects** — floating skull, heart, and sword icons for deaths, births, and combat
 
@@ -65,7 +71,8 @@ src/
     Entity.ts         # Entity factory
     Food.ts           # Food creation, consumption, respawn
     Tribe.ts          # Tribe registry, football team names, membership lifecycle
-    SimulationEngine.ts  # Core tick loop: aging, movement, eating, combat, reproduction, tribes
+    Seasons.ts        # Deterministic season cycle manager (spring/summer/autumn/winter)
+    SimulationEngine.ts  # Core tick loop: aging, movement, eating, combat, reproduction, tribes, seasons
     GameLoop.ts       # RAF loop, tick timing, renderer orchestration
     Analytics.ts      # Statistics, history, gene tracking, Hall of Fame, tribe ranking
   rendering/
